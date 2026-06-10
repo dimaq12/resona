@@ -107,7 +107,8 @@ pair, free probability (closure, the freeness boundary, the semicircle attractor
 the defect = shock = edge identity, and the Extraction Law — is in
 [`THEORY.md`](THEORY.md), with reproducible verification scripts in
 [`theory/`](theory/). The intellectual claims are stated honestly in
-[`NOVELTY.md`](NOVELTY.md).
+[`NOVELTY.md`](NOVELTY.md); what building it revealed — the open conjectures and a
+research log that records the **failures** too — is in [`FRONTIER.md`](FRONTIER.md).
 
 ## License
 
