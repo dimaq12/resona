@@ -71,3 +71,20 @@ def test_apply_matrix_function():
     got = apply(lambda x: A @ x, lambda lam: np.exp(lam), v, k=80)
     true = linalg.expm(A) @ v
     assert np.max(np.abs(got - true)) < 1e-7 * np.linalg.norm(true)
+
+
+def test_apply_general_nonsymmetric_and_complex():
+    # The general (Arnoldi) path: non-symmetric exp(tA)·v, and complex exp(-itH)·ψ.
+    N = 120
+    A = rng.standard_normal((N, N)) / np.sqrt(N)          # non-symmetric
+    v = rng.standard_normal(N)
+    got = apply(lambda x: A @ x, lambda l: np.exp(0.5 * l), v, k=60, hermitian=False)
+    true = linalg.expm(0.5 * A) @ v
+    assert np.max(np.abs(got.real - true)) < 1e-9 * np.linalg.norm(true)
+
+    H = _sym(N) / np.sqrt(N)                               # Hermitian, complex f
+    psi = rng.standard_normal(N) + 0j
+    got = apply(lambda x: H @ x, lambda l: np.exp(-1j * 0.5 * l), psi, k=80, hermitian=False)
+    true = linalg.expm(-1j * 0.5 * H) @ psi
+    assert np.max(np.abs(got - true)) < 1e-9 * np.linalg.norm(true)
+    assert abs(np.linalg.norm(got) - np.linalg.norm(psi)) < 1e-9 * np.linalg.norm(psi)  # unitary

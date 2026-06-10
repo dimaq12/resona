@@ -124,36 +124,63 @@ class Spectral:
         return f"Spectral(N={self.N}, support=[{lo:.3g}, {hi:.3g}], eff_rank={self.effective_rank():.1f})"
 
 
-# ── APPLY (matrix function on a vector — the evolution primitive) ─────────────
-def apply(matvec, f, v, k: int = 48):
-    """f(A) · v, matrix-free, via Lanczos.
+# ── APPLY (matrix function on a vector — the universal solve/evolve engine) ───
+def apply(matvec, f, v, k: int = 48, hermitian: bool = True):
+    """f(A) · v, matrix-free — the universal engine (not just spectra).
 
-    The evolution primitive: ``exp(tA)·v`` (heat / Schrödinger / diffusion),
-    ``A^{-1}·v`` (solve), ``sign(A)·v``, ``√A·v`` — any scalar function of an
-    operator applied to a vector, from matvecs only.  The engine for solving a
-    linear (or lifted-linear) PDE: lift a nonlinear PDE to a linear operator K
-    (Carleman / Koopman / Cole–Hopf) and evolve  ``u(t) = exp(tK)·u0``.
+    Any scalar function of an operator applied to a vector, from matvecs only:
+        f = 1/λ        →  A⁻¹·v          (SOLVE a linear system, matrix-free)
+        f = exp(tλ)    →  exp(tA)·v      (EVOLVE: heat / diffusion / dynamics)
+        f = exp(-itλ)  →  exp(-itA)·v    (quantum / wave propagation; complex f)
+        f = a low-pass →  filter(A)·v    (DENOISE a signal on any operator)
+        f = √λ, sign…  →  √A·v, projectors (whiten, sample, split spectrum)
+    Lift a NONLINEAR problem to a linear operator K (Carleman / Koopman /
+    Cole–Hopf) and evolve ``u(t)=exp(tK)·u0`` — so this also solves nonlinear
+    ODE/PDE on the manifold where they linearize.
 
-    f is applied elementwise to the Ritz values; for smooth v, k≈40 reaches
-    machine precision.
+    hermitian=True : symmetric/self-adjoint A — Lanczos (cheapest, real f).
+    hermitian=False: GENERAL (non-symmetric / non-normal) A — Arnoldi, and f may
+                     be COMPLEX (e.g. exp(-itλ)).  The result is returned complex
+                     if f or A drives it complex.  This is what makes resona a
+                     general solver, not a spectra-only tool.
     """
-    v = np.asarray(v, float)
+    v = np.asarray(v, complex if not hermitian else float)
     nv = np.linalg.norm(v)
     if nv == 0:
         return v.copy()
     N = len(v)
-    V = np.zeros((N, k)); al = np.zeros(k); be = np.zeros(k)
-    q = v / nv; V[:, 0] = q; qprev = np.zeros(N); b = 0.0; m = k
+
+    if hermitian:                                       # ── Lanczos (symmetric) ──
+        V = np.zeros((N, k)); al = np.zeros(k); be = np.zeros(k)
+        q = v.real / nv; V[:, 0] = q; qprev = np.zeros(N); b = 0.0; m = k
+        for j in range(k):
+            w = matvec(q) - b * qprev
+            al[j] = float(q @ w)
+            w = w - al[j] * q
+            w -= V[:, :j + 1] @ (V[:, :j + 1].T @ w)    # full reorth
+            if j < k - 1:
+                b = float(np.linalg.norm(w))
+                if b < 1e-12:
+                    m = j + 1; break
+                be[j] = b; qprev, q = q, w / b; V[:, j + 1] = q
+        T = np.diag(al[:m]) + np.diag(be[:m - 1], 1) + np.diag(be[:m - 1], -1)
+        theta, S = np.linalg.eigh(T)
+        return nv * (V[:, :m] @ (S @ (np.asarray(f(theta), float) * S[0, :])))
+
+    # ── Arnoldi (general / non-symmetric, possibly complex) ──
+    Q = np.zeros((N, k + 1), complex); H = np.zeros((k + 1, k), complex)
+    Q[:, 0] = v / nv; m = k
     for j in range(k):
-        w = matvec(q) - b * qprev
-        al[j] = float(q @ w)
-        w = w - al[j] * q
-        w -= V[:, :j + 1] @ (V[:, :j + 1].T @ w)        # full reorth
-        if j < k - 1:
-            b = float(np.linalg.norm(w))
-            if b < 1e-12:
-                m = j + 1; break
-            be[j] = b; qprev, q = q, w / b; V[:, j + 1] = q
-    T = np.diag(al[:m]) + np.diag(be[:m - 1], 1) + np.diag(be[:m - 1], -1)
-    theta, S = np.linalg.eigh(T)
-    return nv * (V[:, :m] @ (S @ (np.asarray(f(theta), float) * S[0, :])))
+        w = np.asarray(matvec(Q[:, j]), complex)
+        for i in range(j + 1):                          # modified Gram–Schmidt
+            H[i, j] = np.vdot(Q[:, i], w); w -= H[i, j] * Q[:, i]
+        h = np.linalg.norm(w); H[j + 1, j] = h
+        if h < 1e-12:
+            m = j + 1; break
+        Q[:, j + 1] = w / h
+    Hm = H[:m, :m]
+    vals, W = np.linalg.eig(Hm)                          # f(Hm)·e1 via eig of small Hm
+    c = np.linalg.solve(W, np.eye(m, 1)[:, 0].astype(complex))
+    fHe1 = W @ (np.asarray(f(vals), complex) * c)
+    out = nv * (Q[:, :m] @ fHe1)
+    return out
