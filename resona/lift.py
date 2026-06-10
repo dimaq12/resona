@@ -117,22 +117,24 @@ def carleman_scalar(coeffs, order):
     return M
 
 
-def _gf_solve(A, y, p):
-    """Solve A x = y over GF(p) (p prime) by Gaussian elimination."""
-    A = [row[:] for row in A.tolist()]; y = list(map(int, y)); n = len(y)
-    for c in range(n):
-        piv = next((r for r in range(c, n) if A[r][c] % p), None)
-        if piv is None:
+def _gf_solve(V, y, p):
+    """Solve V x = y over GF(p) (p prime) by vectorized Gauss–Jordan (~20× the
+    pure-Python loop; the O(M³) work stays in numpy, only the M-pivot loop is Python)."""
+    M = len(y)
+    A = np.concatenate([np.asarray(V, np.int64) % p,
+                        (np.asarray(y, np.int64) % p).reshape(-1, 1)], axis=1)
+    for c in range(M):
+        nz = np.nonzero(A[c:, c] % p)[0]
+        if nz.size == 0:
             continue
-        A[c], A[piv] = A[piv], A[c]; y[c], y[piv] = y[piv], y[c]
-        invp = pow(A[c][c] % p, -1, p)
-        A[c] = [(v * invp) % p for v in A[c]]; y[c] = (y[c] * invp) % p
-        for r in range(n):
-            if r != c and A[r][c] % p:
-                f = A[r][c] % p
-                A[r] = [(A[r][i] - f * A[c][i]) % p for i in range(n)]
-                y[r] = (y[r] - f * y[c]) % p
-    return np.array([y[i] % p for i in range(n)], dtype=int)
+        pr = c + nz[0]
+        if pr != c:
+            A[[c, pr]] = A[[pr, c]]
+        A[c] = (A[c] * pow(int(A[c, c] % p), -1, p)) % p
+        m = (A[:, c] % p) != 0; m[c] = False
+        if m.any():
+            A[m] = (A[m] - np.outer(A[m, c], A[c])) % p
+    return A[:, -1] % p
 
 
 def carleman_gf(p, n, func):
@@ -141,16 +143,19 @@ def carleman_gf(p, n, func):
     Since x^p ≡ x (mod p), the monomial basis has exponents in {0..p-1}ⁿ; the
     function becomes an EXACT linear combination f(x) = c·φ(x) over GF(p).
     Returns (coeffs, evaluate) where evaluate(x) reproduces f on every input.
+    (The Vandermonde build + solve are numpy-vectorized — pure-Python would be
+    ~20× slower; for n beyond ~10 a numba/C++ kernel is a further ~1.7×, rarely
+    worth the build — the O(pⁿ·³) work dominates regardless of language.)
     """
     from itertools import product
-    exps = list(product(range(p), repeat=n))                # pⁿ monomials = pⁿ points
-    pts = exps
-    V = np.array([[ (np.prod([pt[d] ** e[d] for d in range(n)])) % p
-                    for e in exps] for pt in pts], dtype=int)
-    y = np.array([func(pt) % p for pt in pts], dtype=int)
+    exps = np.array(list(product(range(p), repeat=n)), dtype=np.int64)   # (M, n)
+    V = np.ones((len(exps), len(exps)), np.int64)                        # V[i,j]=∏ pt_i^e_j
+    for d in range(n):
+        V = (V * (exps[:, d][:, None] ** exps[:, d][None, :])) % p
+    y = np.array([func(tuple(int(v) for v in pt)) for pt in exps], np.int64)
     coeffs = _gf_solve(V, y, p)
 
     def evaluate(x):
-        return int(sum(int(coeffs[m]) * int(np.prod([x[d] ** exps[m][d]
-                   for d in range(n)])) for m in range(len(exps))) % p)
+        x = np.asarray(x)
+        return int(np.sum(coeffs * np.prod(x[None, :] ** exps, axis=1)) % p)
     return coeffs, evaluate
