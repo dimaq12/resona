@@ -47,7 +47,7 @@ sub-algorithms:
    family this cost is a field singular on the **discriminant**. With it: the
    **removable-vs-genuine test** (does a finite lift's effective rank saturate?)
    as a computable criterion for *cheap / liftable / genuine wall*, and the
-   effective rank `Φ₁ = (Σw)²/Σw²` of the response as the **classical↔quantum /
+   effective rank `Φ₁ = Tr(A)²/Tr(A²)` of the response as the **classical↔quantum /
    cheap↔hard dial**.
 
 4. **The unifying synthesis.** Identifying the **defect** (numerical-analysis
@@ -61,6 +61,68 @@ sub-algorithms:
 formulation of the Extraction Law and its removable/genuine criterion; the
 `Φ₁`-as-dial proposal; and the unifying synthesis above. These are research
 contributions, offered openly under MIT, with attribution requested.
+
+## The mathematical ideas we read as ours
+
+Beyond the code, `resona` encodes a small set of research ideas. Each rests on
+classical mathematics (credited above); **what is ours is the cross-field
+synthesis and the specific conjectures** — stated here with their status, so the
+claim is exact and bounded. (Full development lives in the companion research;
+this is the intellectual core the library embodies.)
+
+**1. The Extraction Law.** The cost to extract a solution from the resolvent
+(Green's) field scales as `ε^{-a} · dist(z, Σ*)^{-b}`, where `Σ*` is the field's
+**non-removable** singular set (edges, branch points, shocks, continua — *not*
+isolated poles, which deflate), and the exponent `b` is set by the singularity
+*type*. Over a parameter family the cost is a scalar field **singular on the
+discriminant** — the phase diagram of computability.
+*Ours:* the single statement holding the same shape across solves, spectra,
+disorder, and the P↔BQP boundary. *Classical:* the per-field cost laws
+(condition number / Krylov, critical slowing, BBP, sample-complexity ∝ rank).
+*Status:* candidate framework; exponents partly verified numerically.
+
+**2. The identity  defect = shock = edge = phase boundary.** The
+numerical-analysis **defect** (`D_n = P_n − P_{2n}`, the frozen-prediction error,
+the spectral curvature `κ_W`) is identified with the **free-convolution Burgers
+shock**, the **edge of chaos of the subordination fixed point** (`|T'|→1`,
+critical slowing), and the **spectral phase boundary** — one object across
+numerical analysis, free probability, and dynamics.
+*Ours:* the identification as one object. *Classical:* each component
+(Voiculescu/Biane free convolution = complex Burgers; critical slowing; band
+edges). *Status:* synthesis, numerically illustrated.
+
+**3. Φ₁ as the dial of difficulty.** The effective rank of the response measure,
+`Φ₁ = Tr(A)² / Tr(A²)`, is proposed as the measurable quantity that grades a
+problem: **low Φ₁ ⇒ structured / cheap / dequantizable; high Φ₁ ⇒ genuine
+frontier** (including the classical↔quantum boundary). With it, the
+**removable-vs-genuine test**: a finite lift's effective rank *saturates*
+(apparent wall, extractable) or *grows* (genuine wall, e.g. Shor's orbit).
+*Ours:* Φ₁-as-boundary and the lift-saturation criterion. *Classical:*
+participation ratio; Tang-style low-rank dequantization. *Status:* sharp,
+falsifiable conjecture; demonstrated on examples, not a proven boundary theorem.
+
+**4. The response measure as a conjugate pair, with an uncertainty.** An operator
+is one measure `μ_B = Σ_i (v_iᵀ B v_i) δ(λ_i)` at two resolutions — its **density**
+(`W = ∂λ/∂k`, eigenbasis-resolved) and its **moments** (`Tr(A^p B)`, matrix-free)
+— related by `Σ_i λ_i^p W_i = Tr(A^p B)`, and **Fourier-conjugate** via
+`φ(t)=Tr e^{-itA}`, giving `(λ-resolution) × (moment order) ≳ 1`.
+*Ours:* the framing of W and Φ as one measure at two resolutions, bridged by
+Lanczos quadrature, with a Heisenberg-type bound. *Classical:* the identity itself
+(elementary); SLQ. *Status:* framing.
+
+**5. "Any shock is a sum of linearities" = the R-transform = the Cole–Hopf of free
+probability.** The R-transform linearizes the shock-forming free-convolution flow
+exactly as Cole–Hopf / Carleman linearizes Burgers — verified: the flow is a
+straight line in `R`; the shock lives only in the density.
+*Ours:* the explicit bridge tying the defect-calculus Cole–Hopf/Carleman insight
+to Voiculescu's R-transform. *Classical:* free convolution = Burgers; R-transform;
+Cole–Hopf. *Status:* framing/bridge, numerically verified.
+
+**6. The harvest principle.** The answer pre-exists in the resolvent field;
+solving is **extraction, not creation**; an operator is a program, and a generic
+medium already computes (the response / reservoir). The defect is the
+side-channel to collect.
+*Status:* organizing principle / worldview, not a theorem.
 
 ## Honest status
 
