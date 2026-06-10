@@ -18,6 +18,7 @@ python3 examples/<dir>/<name>.py
 | `spike_detection.py` | the BBP detection threshold — signal vs noise | λ=θ+1/θ above θ_c=1 |
 | `anderson_localization.py` | metal→insulator transition, matrix-free LDOS | Λ: 0.97→0.15, 3.4s |
 | `tracy_widom_edge.py` | universal fluctuation law of `extreme()` | std·N^⅔→1.27, exp −0.65 |
+| `inverse_spectral.py` | hear the shape of an operator — the inverse of `of` (`from_measure`) | recover 3e-7; eigenvalues-alone fail |
 | `signals.py`, `image_anomaly.py` | spectral analysis of 1D signals / images | — |
 
 ## quantum/ — one dial (Φ₁), many problems · [details](quantum/README.md)

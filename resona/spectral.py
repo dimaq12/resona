@@ -17,7 +17,7 @@ Plus the honest cost dial:
 from __future__ import annotations
 import numpy as np
 
-__all__ = ["Spectral", "apply", "local_spectrum", "local_density"]
+__all__ = ["Spectral", "apply", "local_spectrum", "local_density", "from_measure"]
 
 
 def _lanczos(matvec, v0, k):
@@ -210,3 +210,19 @@ def local_density(matvec, v, xs, k: int = 48, eta: float = 0.1):
     xs = np.asarray(xs, float)
     return (w[None, :] * (eta / np.pi)
             / ((xs[:, None] - theta[None, :]) ** 2 + eta ** 2)).sum(1)
+
+
+def from_measure(nodes, weights, k=None):
+    """The INVERSE response transform: a spectral measure (nodes, weights) → the
+    Jacobi (tridiagonal) operator whose e₀-measure it is, as (α, β) — diagonal and
+    POSITIVE off-diagonal.
+
+    Run Lanczos on diag(nodes) from the start vector √weights — the exact inverse
+    of `Spectral.of`'s matrix→measure direction (the Stieltjes / Gauss-quadrature
+    construction; `of` ∘ `from_measure` = identity on the (α,β)).  Recovers a
+    well-conditioned / smooth operator to ~machine precision; the long recurrence
+    is genuinely ill-conditioned when the weights span many orders of magnitude
+    (sharp operators) — the inverse spectral problem's intrinsic difficulty.
+    """
+    lam = np.asarray(nodes, float); w = np.asarray(weights, float)
+    return _lanczos(lambda x: lam * x, np.sqrt(np.clip(w, 0.0, None)), k or len(lam))

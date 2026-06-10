@@ -101,3 +101,14 @@ def test_local_density_ldos():
     assert abs(xs[np.argmax(r)] - d[3]) < 0.05             # peaks at the site's level
     nodes, w = local_spectrum(lambda v: A @ v, e, k=120)
     assert abs(w.sum() - 1.0) < 1e-9                        # weights sum to ‖e‖²=1
+
+
+def test_from_measure_inverts_of():
+    # from_measure ∘ (eigenvalues, e0-weights) recovers a well-conditioned Jacobi matrix.
+    N = 25; d = rng.standard_normal(N); e = rng.uniform(0.5, 1.0, N - 1)
+    A = np.diag(d) + np.diag(e, 1) + np.diag(e, -1)
+    lam, V = np.linalg.eigh(A); w = V[0, :] ** 2
+    from resona import from_measure
+    al, be = from_measure(lam, w)
+    assert np.max(np.abs(al - d)) < 1e-7            # diagonal
+    assert np.max(np.abs(be - e)) < 1e-7            # |off-diagonal| (positive gauge)
