@@ -11,6 +11,7 @@ python3 examples/<dir>/<name>.py
 ## Core (root)
 | file | what | metric |
 |------|------|--------|
+| ⭐ `grand_tour.py` | **the whole theory in one chained pipeline** — all 8 modules, consistent | Δm 0.01, beta 0.6%, t_c≈1, design 3e-15 |
 | `killer_tasks.py` | 5 flagship matrix-free tasks (log-det, Hessian, A+B, trainability, Φ₁) | see table in README |
 | `nonlinear_pde.py` | nonlinear Burgers via Cole–Hopf lift → `resona.apply` | residual 4.8e-9 |
 | 🎯 `spectra_to_machine_precision.py` | 35 operators → spectra (Ritz seed → Rayleigh polish) | **1e-16, 99% machine-zero** |
