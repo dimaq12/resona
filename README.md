@@ -64,6 +64,15 @@ object — the way FFT organizes signal processing. The unifying claims (the
 Extraction Law, `Φ₁`-as-boundary) are research hypotheses, labelled as such; the
 computations are verified.
 
+## Theory
+
+The unified picture behind the library — the response measure as a conjugate
+pair, free probability (closure, the freeness boundary, the semicircle attractor),
+the defect = shock = edge identity, and the Extraction Law — is in
+[`THEORY.md`](THEORY.md), with reproducible verification scripts in
+[`theory/`](theory/). The intellectual claims are stated honestly in
+[`NOVELTY.md`](NOVELTY.md).
+
 ## License
 
 MIT © 2026 Dmitry Sierikov. Attribution requested for the research contributions
