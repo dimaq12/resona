@@ -1,0 +1,76 @@
+"""Tests for the theory modules: wkernel, lift, beta, defect, free (vs ground truth)."""
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+import numpy as np
+from scipy import linalg
+import resona
+
+rng = np.random.default_rng(0)
+
+
+def test_beta_from_spectral():
+    N = 400
+    B = rng.standard_normal((N, 80)); A = (B @ B.T) / 80
+    s = resona.of(lambda v: A @ v, N, k=80, probes=8)
+    lev = np.sort(resona.beta.beta_from(s, N))
+    true = np.sort(linalg.eigvalsh(A))
+    assert np.mean(np.abs(lev - true)) / (true.max() - true.min()) < 0.06
+
+
+def test_wkernel_matches_finite_diff():
+    n = 120; G = rng.standard_normal((n, n)); A0 = (G + G.T) / 2
+    Bp = np.diag(rng.standard_normal(n))
+    w, V = linalg.eigh(A0)
+    W = resona.wkernel.wkernel(V[:, :6], [Bp])
+    fd = (np.sort(linalg.eigvalsh(A0 + 1e-6 * Bp))[:6] - np.sort(w)[:6]) / 1e-6
+    assert np.max(np.abs(W[:, 0] - fd)) < 1e-3
+
+
+def test_defect_richardson():
+    f = lambda n: np.pi + 1.3 / n + 0.7 / n ** 2
+    r = resona.defect.richardson(f(50), f(100), p=1)
+    assert abs(r - np.pi) < abs(f(100) - np.pi) / 5
+
+
+def test_free_cumulants_semicircle():
+    kap = resona.free.free_cumulants([0, 1, 0, 2, 0, 5])    # semicircle moments
+    assert abs(kap[1] - 1) < 1e-9
+    assert max(abs(k) for i, k in enumerate(kap) if i != 1) < 1e-9
+
+
+def test_freeness_defect_free_vs_nonfree():
+    M = 600; X = rng.standard_normal((M, M)); A = (X + X.T) / np.sqrt(2 * M)
+    Q, _ = linalg.qr(rng.standard_normal((M, M))); Bf = Q @ A @ Q.T
+    free = resona.free.freeness_defect(lambda x: A @ x, lambda x: Bf @ x, M, probes=20)
+    non = resona.free.freeness_defect(lambda x: A @ x, lambda x: A @ x, M, probes=20)
+    assert free < 0.05 < non
+
+
+def test_r_transform_additivity():
+    M = 600; X = rng.standard_normal((M, M)); A = (X + X.T) / np.sqrt(2 * M)
+    Q, _ = linalg.qr(rng.standard_normal((M, M))); Bf = Q @ A @ Q.T
+    sA = resona.of(lambda v: A @ v, M, k=90, probes=6)
+    sB = resona.of(lambda v: Bf @ v, M, k=90, probes=6)
+    sAB = resona.of(lambda v: (A + Bf) @ v, M, k=90, probes=6)
+    wg = np.linspace(0.05, 0.4, 6)
+    RA = resona.lift.r_transform(sA, wg); RB = resona.lift.r_transform(sB, wg)
+    RAB = resona.lift.r_transform(sAB, wg)
+    assert np.max(np.abs(RAB - (RA + RB))) / np.max(np.abs(RAB)) < 0.15
+
+
+def test_carleman_scalar_logistic_stepped():
+    M = resona.lift.carleman_scalar([0, 1, -1], order=12)
+    x, dt, T = 0.2, 0.1, 2.0
+    for _ in range(int(T / dt)):
+        z0 = np.array([x ** (j + 1) for j in range(12)])
+        x = float(resona.apply(lambda v: M @ v, lambda l: np.exp(dt * l), z0,
+                               k=12, hermitian=False)[0].real)
+    exact = 0.2 * np.exp(T) / (1 + 0.2 * (np.exp(T) - 1))
+    assert abs(x - exact) < 1e-9
+
+
+def test_carleman_gf_exact():
+    from itertools import product
+    for f in (lambda x: max(x), lambda x: min(x), lambda x: (x[0] + x[1]) % 3):
+        _, ev = resona.lift.carleman_gf(3, 2, f)
+        assert all(ev(x) == f(x) for x in product(range(3), repeat=2))
