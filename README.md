@@ -77,9 +77,18 @@ tested library modules (not re-derived in each script):
   (`D_{2n}=Jⁿ·D_n` exact).
 - **`resona.free`** — `free_cumulants`, the `freeness` criterion (mixed cumulants
   vanish ⇔ composition closes), `cross_moment` — the response algebra's coordinates.
+- **`resona.subordination`** — disorder averaging / free addition with a semicircle
+  in CLOSED FORM (the Pastur fixed point `g = G_A(z − σ²g)`), no realizations, no eig.
+- **`resona.lift.free_convolution`** — compose two spectra **without a joint matvec**
+  (`κ_n(A⊞B)=κ_n(A)+κ_n(B)`), the measure-level version of `s + t`.
+- **`resona.cost`** — the **Extraction Law** `Cost ~ ε^{-a}·dist(z,Σ*)^{-b}`, `phi1`
+  (Φ₁), and the removable-vs-genuine classifier (`is_extractable`, lift-rank saturation).
+- **`resona.flow`** — free convolution as the complex **Burgers** flow; `shock_time`
+  finds the band-merger (defect = shock = spectral edge).
 
 Each is verified against dense ground truth in `tests/` (R-transform additivity to
-0.5%, freeness defect 0.004 vs 2.0, Carleman/logic exact, W-kernel vs finite-diff 2e-7).
+0.5%, freeness defect 0.004 vs 2.0, Carleman/logic exact, W-kernel vs finite-diff 2e-7,
+Pastur m₂ matches Monte-Carlo, extractable-vs-genuine classifier, shock t_c≈1).
 
 ## Honesty
 

@@ -74,3 +74,47 @@ def test_carleman_gf_exact():
     for f in (lambda x: max(x), lambda x: min(x), lambda x: (x[0] + x[1]) % 3):
         _, ev = resona.lift.carleman_gf(3, 2, f)
         assert all(ev(x) == f(x) for x in product(range(3), repeat=2))
+
+
+def test_free_convolution_moments():
+    M = 900; d = rng.uniform(-1, 1, M); A = np.diag(d)
+    Q, _ = linalg.qr(rng.standard_normal((M, M))); B = Q @ A @ Q.T
+    sA = resona.of(lambda v: A @ v, M, k=120, probes=16)
+    sB = resona.of(lambda v: B @ v, M, k=120, probes=16)
+    mpred = resona.lift.free_convolution(sA, sB, order=4)
+    mtrue = [np.trace(np.linalg.matrix_power(A + B, n)) / M for n in range(1, 5)]
+    assert max(abs(p - t) for p, t in zip(mpred, mtrue)) < 0.1
+
+
+def test_subordination_averaged_dos():
+    N = 600
+    A = np.diag(np.concatenate([-np.ones(N // 2), np.ones(N // 2)]))   # atoms ±1
+    sA = resona.of(lambda v: A @ v, N, k=80, probes=8)
+    xs = np.linspace(-3, 3, 1500)
+    rho = resona.subordination.averaged_dos(sA, 0.5, xs, eta=2e-3)
+    mass = np.trapezoid(rho, xs); m2 = np.trapezoid(xs ** 2 * rho, xs)
+    assert abs(mass - 1) < 0.03
+    assert abs(m2 - 1.25) < 0.05                          # m2(A)+σ² = 1 + 0.25
+
+
+def test_cost_extractable_vs_genuine():
+    x = np.arange(300)
+    ext_p, _ = resona.cost.is_extractable(np.sin(2 * np.pi * x / 7))
+    seq = np.array([pow(3, int(i), 100003 * 100019) for i in range(300)], float)
+    ext_s, _ = resona.cost.is_extractable(seq)
+    assert ext_p and not ext_s
+
+
+def test_cost_fit_law():
+    eps = np.array([1e-2, 1e-3, 1e-4] * 3); dist = np.repeat([0.1, 0.3, 1.0], 3)
+    costs = resona.cost.extraction_cost(eps, dist, a=1.5, b=0.8, c=2.0)
+    a, b, c = resona.cost.fit_law(costs, eps, dist)
+    assert abs(a - 1.5) < 1e-6 and abs(b - 0.8) < 1e-6
+
+
+def test_flow_shock_time():
+    N = 600
+    A = np.diag(np.concatenate([-np.ones(N // 2), np.ones(N // 2)]))
+    sA = resona.of(lambda v: A @ v, N, k=80, probes=8)
+    tc = resona.flow.shock_time(sA)
+    assert tc is not None and abs(tc - 1.0) < 0.3       # two atoms ±1 merge at t_c=1

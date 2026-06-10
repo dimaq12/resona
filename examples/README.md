@@ -56,6 +56,8 @@ python3 examples/<dir>/<name>.py
 | `arithmetic_manifold.py` | 12 bit-ops self-cluster by spectral fingerprint | silhouette 0.40 (partial, honest) |
 | 🎯 `affine_flow.py` | exact exp(dt·J) flow for stiff/non-normal ODEs (`apply`) | accuracy 38–141× BE (timing caveat) |
 | 🎯 `free_probability.py` | free cumulants, freeness criterion, R-transform additivity | R add. 9e-4; freeness 1e-4 vs 3.0 |
+| `free_convolution_flow.py` | compose spectra w/o joint matvec; Pastur DOS; Burgers shock | Δm 0.01; m₂ vs MC; t_c≈1 |
+| `extraction_law.py` | removable vs genuine walls by lift-rank saturation | periodic→extract, aˣ mod N→wall; law fit (1.5,0.8) |
 
 ## science/ — spectral lens on real physics
 | file | what | metric |

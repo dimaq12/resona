@@ -13,10 +13,11 @@ matrix-free — and from which every spectral functional is read.
     s.effective_rank()             # the honest cost dial (Φ₁)
 """
 from .spectral import Spectral, apply
-from . import wkernel, lift, beta, defect, free
+from . import wkernel, lift, beta, defect, free, subordination, cost, flow
 
 #: convenience: ``resona.of(matvec, N)`` == ``Spectral.of(matvec, N)``
 of = Spectral.of
 
-__version__ = "0.2.0"
-__all__ = ["Spectral", "of", "apply", "wkernel", "lift", "beta", "defect", "free"]
+__version__ = "0.3.0"
+__all__ = ["Spectral", "of", "apply", "wkernel", "lift", "beta", "defect",
+           "free", "subordination", "cost", "flow"]
