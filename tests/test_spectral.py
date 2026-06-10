@@ -53,10 +53,11 @@ def test_compose_sum_matrix_free():
 
 
 def test_effective_rank_low_vs_full():
+    # Φ₁ is defined for PSD operators (covariance / kernel / Hessian).
     N = 400
-    U = rng.standard_normal((N, 6)); low = U @ U.T
-    full = _sym(N)
-    s_low = Spectral.of(lambda v: low @ v, N, k=60, probes=12)
-    s_full = Spectral.of(lambda v: full @ v, N, k=60, probes=12)
-    assert s_low.effective_rank() < 0.2 * N
-    assert s_full.effective_rank() > 3 * s_low.effective_rank()
+    U = rng.standard_normal((N, 6)); low = U @ U.T                  # PSD, rank 6
+    B = rng.standard_normal((N, N)); full = (B @ B.T) / N           # PSD, full rank
+    s_low = Spectral.of(lambda v: low @ v, N, k=60, probes=16)
+    s_full = Spectral.of(lambda v: full @ v, N, k=60, probes=16)
+    assert s_low.effective_rank() < 0.1 * N                         # ≈ 6
+    assert s_full.effective_rank() > 5 * s_low.effective_rank()     # ≈ N/2

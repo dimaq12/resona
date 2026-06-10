@@ -82,8 +82,8 @@ def task_trainability(N=200):
 # 5 ── Effective rank / capacity dial  (structured vs full) ────────────────────
 def task_effrank(N=800):
     hdr("5. Effective rank Φ₁  (the cost dial: structured/cheap vs full/frontier)")
-    U = rng.standard_normal((N, 8)); low = U @ U.T          # rank 8
-    M = rng.standard_normal((N, N)); full = (M + M.T) / 2    # full rank
+    U = rng.standard_normal((N, 8)); low = U @ U.T          # PSD, rank 8
+    M = rng.standard_normal((N, N)); full = (M @ M.T) / N    # PSD, full rank
     s_low = Spectral.of(lambda v: low @ v, N, k=60, probes=12)
     s_full = Spectral.of(lambda v: full @ v, N, k=60, probes=12)
     print(f"   low-rank operator   Φ₁ = {s_low.effective_rank():>6.1f}   (≈ 8 → cheap, liftable)")

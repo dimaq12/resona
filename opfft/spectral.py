@@ -107,11 +107,12 @@ class Spectral:
 
     # ── COST dial (the harvestable structure) ─────────────────────────────────
     def effective_rank(self) -> float:
-        """Φ₁ = (Σ w)² / Σ w²  — the effective number of distinct spectral modes
-        carried by the response.  Low Φ₁ ⇒ structured/cheap; high ⇒ near the
-        genuine frontier.  (See the project's NOVELTY/Extraction-Law note.)"""
-        w = self.weights
-        return float(w.sum() ** 2 / np.sum(w ** 2))
+        """Φ₁ = Tr(A)² / Tr(A²) — participation ratio / effective number of modes,
+        for POSITIVE-SEMIDEFINITE operators (covariance, kernel, Hessian).  Low Φ₁
+        ⇒ structured/cheap; high ⇒ near the genuine frontier.  (Computed from the
+        trace moments, which SLQ estimates robustly.)"""
+        m1, m2 = self.moment(1), self.moment(2)
+        return float(m1 * m1 / m2) if m2 > 0 else 1.0
 
     # ── internals ─────────────────────────────────────────────────────────────
     def _require_matvec(self, other):
