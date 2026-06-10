@@ -93,14 +93,21 @@ realization; the operator-valued level is the genuinely richer, less-exploited o
 Calibrated honesty means recording the negative results too.
 
 - **`lift_rank` exactness — REFUTED.** See ①②. Soft rank, not exact dimension.
-- **Edge critical exponent — NOT MEASURED (naïve attempt failed).** The boldest
-  claim (§3) predicts the subordination fixed-point iteration count diverges as
-  `dist(edge)^{-b}`. A quick attempt to measure even one `b` **broke**: the damped
-  iteration did not converge near the edge (hit a 200k-iteration cap at every
-  `δ < 0.3`), and evaluating `G_A` on the real axis next to a discrete spectrum is
-  unstable. A reported `b≈0.9` was an artefact of the cap — **discarded.** Doing
-  it properly needs off-axis continuation, Anderson acceleration, and an analytic
-  `G_A`. *Status of §3: the most exciting and the LEAST verified.*
+- **Edge critical exponent — first attempt FAILED, second SUCCEEDED**
+  (`theory/hardness_exponents.py`). The naïve subordination-iteration attempt
+  broke (200k-cap artefact, `b≈0.9` discarded). Reframed onto two clean objects:
+  - *Non-Hermitian, order-q EP* (companion `λ^q = s`): eigenvalue conditioning —
+    an algorithm-independent lower bound — scales as `dist^{-(1-1/q)}`. Measured
+    `b = 0.500 / 0.666 / 0.748 / 0.796` for `q = 2/3/4/5` (predicted `1-1/q`);
+    splitting `s^{1/q}` confirms the order. **The hardness exponent IS quantized
+    by the EP order.**
+  - *Hermitian continuum edge*: actual Lanczos iterations to resolve an eigenvalue
+    a gap `g` above a dense bulk scale as `g^{-0.43} ≈ g^{-1/2}` — the q=2 /
+    square-root-edge class, by a different mechanism (Krylov, not conditioning).
+  *Honest:* both exponents are CLASSICAL (Vishik–Lyusternik/Lidskii EP perturbation;
+  Kaniel–Paige–Saad). What the experiment supports is the **unification** — one
+  cost exponent set by the singularity type. Still open: the multi-parameter
+  catastrophe stratification, and a rigorous lower bound.
 - **Verified (unchanged, in `tests/` and `theory/`):** W=Φ bridge (`1e-13`),
   freeness defect (free `1e-3` vs non-free `28`, ratio `6143×`), R-transform
   additivity (`1e-14`), free CLT (`κ₄·K≈−1`), shock at `t_c=1`, Pastur `m₂`
@@ -126,9 +133,14 @@ Calibrated honesty means recording the negative results too.
 
 *Ours:* the cross-field statement + the universality-class framing. *Classical:*
 critical slowing of fixed-point iteration near a branch point; per-field cost laws
-(Krylov gap-dependence, etc.). *Status:* **candidate framework, largely
-unverified** — 2–3 data points and an analogy; the one quick measurement attempted
-here failed (§2).
+(Krylov gap-dependence, EP perturbation theory). *Status:* the **EP-order column is
+now measured cleanly** — `b_q = 1−1/q` for `q=2..5`, and the Hermitian edge gives
+the q=2 exponent `½` as a real Lanczos cost (§2, `theory/hardness_exponents.py`).
+The exponents themselves are classical; what is supported is the **quantization of
+hardness by singularity type**. Still **unproven**: that this is a full Arnold
+catastrophe stratification (the multi-parameter strata — cusp `⅔` from a genuine
+3-fold coalescence, not just an algebraic order-3 EP), and a rigorous
+algorithm-independent lower bound.
 
 ### What would turn this from rhetoric into a result
 
