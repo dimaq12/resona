@@ -73,9 +73,9 @@ if __name__ == "__main__":
     ics = {"Burgers (saw)": 2 * (x % 1.0) - 1, "Gauss spike": g(.5, .015),
            "sine-1 (smooth)": sn(1), "cosine-2 (smooth)": cs(2), "sine-5+cos2": sn(5) + cs(2),
            "two bumps": g(.3, .04) + g(.7, .04), "chirp": np.sin(2*np.pi*(2*x+6*x**2))}
-    print("\n  [3] 35-PDE conductivity operators — recover k from the measure:")
-    print(f"      {'initial condition':>20} {'k recovery err':>16}  conditioning")
-    print("      " + "─" * 56)
+    print("\n  [3] 35-PDE conductivity operators — recover k from ONE boundary measure:")
+    print(f"      {'initial condition':>20} {'weight w_max/w_min':>19} {'k err':>9}  cond.")
+    print("      " + "─" * 60)
     for name, ic in ics.items():
         ktrue = s2k(ic); A = tridiag(ktrue)
         lam, V = np.linalg.eigh(A); w = V[0, :] ** 2
@@ -85,15 +85,22 @@ if __name__ == "__main__":
         for j in range(N - 1):
             M[j, j] = 1; M[j, j + 1] = 1; r[j] = c[j]
         M[N - 1, :] = 1.0 / N; r[N - 1] = ktrue.mean()             # mean anchors the gauge
-        krec = np.linalg.solve(M, r)
-        err = np.linalg.norm(krec - ktrue) / np.linalg.norm(ktrue)
-        tag = "clean ✓" if err < 1e-3 else ("ok" if err < 0.1 else "ILL-CONDITIONED")
-        print(f"      {name:>20} {err:>16.2e}  {tag}")
+        err = np.linalg.norm(np.linalg.solve(M, r) - ktrue) / np.linalg.norm(ktrue)
+        wrange = w.max() / w.min()                                  # the conditioning, exposed
+        tag = "clean ✓" if err < 1e-3 else ("ok" if err < 0.1 else "ILL-COND ✗")
+        print(f"      {name:>20} {wrange:>19.1e} {err:>9.1e}  {tag}")
 
     print("\n" + "=" * 74)
-    print("  from_measure is the exact inverse of of (the Stieltjes construction): the")
-    print("  spectral MEASURE — eigenvalues AND boundary overtone amplitudes — recovers")
-    print("  the operator, while eigenvalues alone cannot (you can't hear a drum's shape).")
-    print("  For sharp conductivities the long recurrence is ill-conditioned — the")
-    print("  inverse problem's genuine difficulty, reported honestly, not hidden.")
+    print("  from_measure is the exact inverse of of (Stieltjes): the spectral MEASURE")
+    print("  recovers the operator; eigenvalues alone cannot (you can't hear a drum's")
+    print("  shape).  The blow-up has a precise cause: modes localized away from the")
+    print("  boundary are INVISIBLE to one probe (their weights w_i=|⟨e₀|ψ_i⟩|² fall")
+    print("  ~10⁵⁰ below the rest, lost to rounding).  SMOOTH k needs only the visible")
+    print("  low modes → recovers despite the huge weight range; SHARP/discontinuous k")
+    print("  (Burgers) needs the high modes the boundary cannot see → it blows up.")
+    print("  This is why the original sft35 pipeline did NOT blow up: it")
+    print("  used the FULL spatial response ∂λ/∂k (every site, every mode visible) +")
+    print("  regularization — bounded, recovering a smoothed k — and reserved machine")
+    print("  precision for the forward SPECTRUM (Rayleigh), not for k.  Listen from one")
+    print("  point → ill-posed;  listen from everywhere → regularizable.")
     print("=" * 74)
