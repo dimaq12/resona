@@ -1,9 +1,9 @@
-"""Tests for opfft.Spectral — verified against dense ground truth (fixed seeds)."""
+"""Tests for resona.Spectral — verified against dense ground truth (fixed seeds)."""
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 from scipy import linalg
-from opfft import Spectral
+from resona import Spectral
 
 rng = np.random.default_rng(7)
 

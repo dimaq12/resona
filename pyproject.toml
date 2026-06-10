@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "opfft"
+name = "resona"
 version = "0.1.0"
 description = "The FFT of operators: probe, compose, read — matrix-free spectral computation with a built-in cost law."
 readme = "README.md"
@@ -28,9 +28,9 @@ dependencies = ["numpy>=1.20", "scipy>=1.7"]
 test = ["pytest>=7"]
 
 [project.urls]
-Homepage = "https://github.com/dimaq12/opfft"
-Source = "https://github.com/dimaq12/opfft"
+Homepage = "https://github.com/dimaq12/resona"
+Source = "https://github.com/dimaq12/resona"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["opfft*"]
+include = ["resona*"]

@@ -1,5 +1,5 @@
 """
-opfft on ANY image — per-region spectral descriptor + anomaly + control.
+resona on ANY image — per-region spectral descriptor + anomaly + control.
 
 Same pipeline as a JWST κ_W scan, but the descriptor is the effective rank Φ₁
 of the region's PATCH COVARIANCE — which reads spatial GEOMETRY (structured ⇒
@@ -11,7 +11,7 @@ Run:  python3 examples/image_anomaly.py
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
-from opfft import Spectral
+from resona import Spectral
 
 rng = np.random.default_rng(0)
 
@@ -42,7 +42,7 @@ if __name__ == "__main__":
     struct = structured_patch(n) + 0.3 * rng.standard_normal((n, n))
 
     print("=" * 64)
-    print("opfft on ANY image — geometry descriptor Φ₁ (low=structured, high=noise)")
+    print("resona on ANY image — geometry descriptor Φ₁ (low=structured, high=noise)")
     print("=" * 64)
     phi_noise = region_phi1(noise)
     phi_struct = region_phi1(struct)

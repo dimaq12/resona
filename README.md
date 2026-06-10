@@ -1,4 +1,4 @@
-# opfft — the FFT of operators
+# resona — the FFT of operators
 
 > `fft(x)` takes a **signal** to the basis where convolution becomes pointwise
 > multiply. `Spectral.of(A)` takes an **operator** (black-box matvec) to the
@@ -8,7 +8,7 @@
 One object. Three verbs. No matrix is ever formed; `eig` is never called.
 
 ```python
-from opfft import Spectral
+from resona import Spectral
 
 s = Spectral.of(matvec, N)      # PROBE   — harvest the operator's response
 t = Spectral.of(matvec2, N)
@@ -58,7 +58,7 @@ high ⇒ near the genuine frontier — and the *Extraction Law* it comes from.
 ## Honesty
 
 The underlying algorithms (SLQ, Lanczos, free probability) are **classical** and
-credited in [`NOVELTY.md`](NOVELTY.md). `opfft`'s contribution is the **single
+credited in [`NOVELTY.md`](NOVELTY.md). `resona`'s contribution is the **single
 primitive + matrix-free composition algebra + the built-in cost law** as one
 object — the way FFT organizes signal processing. The unifying claims (the
 Extraction Law, `Φ₁`-as-boundary) are research hypotheses, labelled as such; the

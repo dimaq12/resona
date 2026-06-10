@@ -1,5 +1,5 @@
 """
-opfft — killer tasks, one primitive, matrix-free, with metrics vs ground truth.
+resona — killer tasks, one primitive, matrix-free, with metrics vs ground truth.
 
 Every task below is: give an operator as a matvec → read a spectral functional
 (or compose first) → never form the matrix, never call eig.
@@ -10,7 +10,7 @@ import sys, os, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 from scipy import linalg
-from opfft import Spectral
+from resona import Spectral
 
 rng = np.random.default_rng(0)
 
@@ -27,7 +27,7 @@ def task_gp_logdet(N=700):
     s = Spectral.of(lambda v: K @ v, N, k=70, probes=24)
     est = s.trace(lambda x: np.log(np.maximum(x, 1e-12)))
     true = np.linalg.slogdet(K)[1]
-    print(f"   log|K|   opfft = {est:>12.2f}   true = {true:>12.2f}   "
+    print(f"   log|K|   resona = {est:>12.2f}   true = {true:>12.2f}   "
           f"rel.err = {abs(est-true)/abs(true):.2%}   (no Cholesky, matvec only)")
 
 
@@ -41,9 +41,9 @@ def task_hessian_spectrum(d=600, n=900):
     top_est = s.extreme()[1]
     top_true = linalg.eigvalsh(H)[-1]
     tr_est, tr_true = s.moment(1), float(np.trace(H))
-    print(f"   sharpness (λ_max)  opfft = {top_est:>9.4f}   true = {top_true:>9.4f}   "
+    print(f"   sharpness (λ_max)  resona = {top_est:>9.4f}   true = {top_true:>9.4f}   "
           f"err = {abs(top_est-top_true)/top_true:.2%}")
-    print(f"   total curvature Tr opfft = {tr_est:>9.2f}   true = {tr_true:>9.2f}   "
+    print(f"   total curvature Tr resona = {tr_est:>9.2f}   true = {tr_true:>9.2f}   "
           f"err = {abs(tr_est-tr_true)/tr_true:.2%}")
 
 
@@ -57,8 +57,8 @@ def task_compose(N=1500):
     sB = Spectral.of(lambda x: A0@x + wB*x, N)
     lo, hi = (sA + sB).extreme()                           # A+B never formed
     ev = np.sort(linalg.eigvalsh(A0.toarray()+np.diag(wA) + A0.toarray()+np.diag(wB)))
-    print(f"   eig(A+B) max  opfft = {hi:>8.3f}   true = {ev[-1]:>8.3f}   err = {abs(hi-ev[-1]):.1e}")
-    print(f"   eig(A+B) min  opfft = {lo:>8.3f}   true = {ev[0]:>8.3f}   err = {abs(lo-ev[0]):.1e}")
+    print(f"   eig(A+B) max  resona = {hi:>8.3f}   true = {ev[-1]:>8.3f}   err = {abs(hi-ev[-1]):.1e}")
+    print(f"   eig(A+B) min  resona = {lo:>8.3f}   true = {ev[0]:>8.3f}   err = {abs(lo-ev[0]):.1e}")
 
 
 # 4 ── Deep-net trainability from init  (S-transform / dynamical isometry) ─────

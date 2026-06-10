@@ -1,5 +1,5 @@
 """
-opfft.spectral — the Response transform: the "FFT of operators".
+resona.spectral — the Response transform: the "FFT of operators".
 
 `fft(x)` takes a signal to the basis where convolution becomes pointwise multiply.
 `Spectral.of(A)` takes an operator (black-box matvec) to the representation where

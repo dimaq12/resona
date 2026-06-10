@@ -2,7 +2,7 @@
 
 **Author:** Dmitry Sierikov, 2026.  **License:** MIT (code).
 
-This note states **honestly** what is original to `opfft` and what is classical
+This note states **honestly** what is original to `resona` and what is classical
 prior art it stands on. Calibrated honesty is the point: a tool that overclaims is
 a tool you cannot trust.
 
@@ -10,7 +10,7 @@ a tool you cannot trust.
 
 ## What we do NOT claim (classical foundations, credited)
 
-`opfft` is built on established numerical linear algebra and free probability. We
+`resona` is built on established numerical linear algebra and free probability. We
 claim none of the following — they are the field's, and we use them gratefully:
 
 - **Stochastic Lanczos quadrature (SLQ)** for `Tr f(A)` / spectral densities —
@@ -24,7 +24,7 @@ claim none of the following — they are the field's, and we use them gratefully
 
 If you need a specific sub-algorithm, it predates this package.
 
-## What `opfft` contributes (and reserves)
+## What `resona` contributes (and reserves)
 
 The contribution is **synthesis, framing, and one interface** — not new
 sub-algorithms:
