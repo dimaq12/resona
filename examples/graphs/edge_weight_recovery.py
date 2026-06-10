@@ -38,6 +38,7 @@ from scipy import sparse
 from scipy.sparse.linalg import eigsh
 from scipy.optimize import least_squares
 import resona
+from resona import wkernel as wk  # spectral Jacobian primitive: W[k,e] = v_k^T B_e v_k
 
 rng = np.random.default_rng(42)
 
@@ -90,11 +91,8 @@ def hf_recovery(N: int, K: int, lam_target: np.ndarray, w_init: np.ndarray,
         res = lam - lam_target
         errors.append(float(np.max(np.abs(res))))
 
-        # Analytical Jacobian: J[k,e] = phi_k^T (dL/dw_e) phi_k
-        J = np.zeros((K, M))
-        for e in range(M):
-            for k in range(K):
-                J[k, e] = float(phi[:, k] @ edge_laplacian_matvec(N, e, phi[:, k]))
+        # Analytical Jacobian via resona.wkernel: W[k,e] = v_k^T (dL/dw_e) v_k
+        J = wk.wkernel(phi, [lambda v, e=e: edge_laplacian_matvec(N, e, v) for e in range(M)])
 
         # Gauss-Newton step: solve (J^T J) dw = J^T res
         JtJ = J.T @ J

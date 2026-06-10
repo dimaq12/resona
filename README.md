@@ -62,6 +62,25 @@ spectral functional of a (possibly composed) operator you can only matvec.
 Plus the **cost dial** `effective_rank()` (`Φ₁`) — low ⇒ structured/cheap;
 high ⇒ near the genuine frontier — and the *Extraction Law* it comes from.
 
+## The theory, as first-class modules
+
+The spectral core above is one pillar. The rest of the program is promoted to
+tested library modules (not re-derived in each script):
+
+- **`resona.wkernel`** — the spectral Jacobian `W[i,j] = ∂λ_i/∂k_j` (Hellmann–
+  Feynman) + inverse spectral **design** (choose parameters to hit a target spectrum).
+- **`resona.lift`** — the LIFT, *"a shock is a sum of linearities"*: `r_transform` /
+  `s_transform` (free `⊞`/`⊠` linearizers), `carleman_scalar` (nonlinear ODE → one
+  matrix exponential), `carleman_gf` (exact GF(p) logic → linear polynomial).
+- **`resona.beta`** — Beta-law closure: spectral support + 2 moments → the whole spectrum.
+- **`resona.defect`** — error-as-information: `defect`, `richardson`, `defect_jump`
+  (`D_{2n}=Jⁿ·D_n` exact).
+- **`resona.free`** — `free_cumulants`, the `freeness` criterion (mixed cumulants
+  vanish ⇔ composition closes), `cross_moment` — the response algebra's coordinates.
+
+Each is verified against dense ground truth in `tests/` (R-transform additivity to
+0.5%, freeness defect 0.004 vs 2.0, Carleman/logic exact, W-kernel vs finite-diff 2e-7).
+
 ## Honesty
 
 The underlying algorithms (SLQ, Lanczos, free probability) are **classical** and

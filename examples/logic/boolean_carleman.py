@@ -41,7 +41,9 @@ Run:  cd /home/dima/resona && python3 examples/logic/boolean_carleman.py
 import sys, os, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 import numpy as np
-from itertools import combinations
+from itertools import combinations, product as iproduct
+import resona
+from resona import lift as resona_lift  # library primitive: replaces local truth_table_to_coeffs
 
 
 # ---------------------------------------------------------------------------
@@ -80,51 +82,15 @@ def build_multiplication_table(basis):
 
 
 # ---------------------------------------------------------------------------
-# 3.  FUNCTION -> GF(2) POLYNOMIAL COEFFICIENTS  (Mobius / GF(2) Vandermonde)
+# 3.  FUNCTION -> GF(2) POLYNOMIAL COEFFICIENTS  (via resona.lift.carleman_gf)
 # ---------------------------------------------------------------------------
 
-def truth_table_to_coeffs(tt, basis, N):
-    """
-    Solve V * c = tt over GF(2) where V[x, k] = phi_k(x).
-    V is an M×M 0/1 matrix; we use bitwise Gaussian elimination for speed.
-    """
-    M = len(basis)
-    assert M == 2**N, "basis must be complete"
-    # Build V row by row as integer bitmasks (each row = one input point x)
-    # Augmented system: each row is a Python int bitmask (cols 0..M-1 = monomial,
-    # col M = rhs).  Python ints handle arbitrary width cleanly.
-    aug = []
-    for x in range(M):
-        mask = 0
-        for k, mono in enumerate(basis):
-            if monomial_eval_bool(mono, x):
-                mask |= (1 << k)
-        aug.append(mask | (int(tt[x]) << M))
-
-    # GF(2) Gaussian elimination over Python-int bitmasks
-    col_to_row = {}
-    pivot_row = 0
-    for col in range(M):
-        found = -1
-        for r in range(pivot_row, M):
-            if (aug[r] >> col) & 1:
-                found = r
-                break
-        if found < 0:
-            continue
-        aug[pivot_row], aug[found] = aug[found], aug[pivot_row]
-        col_to_row[col] = pivot_row
-        pr_val = aug[pivot_row]
-        for r in range(M):
-            if r != pivot_row and (aug[r] >> col) & 1:
-                aug[r] ^= pr_val
-        pivot_row += 1
-
-    # Extract solution
-    coeffs = np.zeros(M, dtype=np.int8)
-    for col, pr in col_to_row.items():
-        coeffs[col] = int((aug[pr] >> M) & 1)
-    return coeffs
+def truth_table_to_coeffs(fn_tuple, N):
+    """Solve GF(2) Vandermonde for fn_tuple: {0,1}^N→{0,1} (accepts tuple).
+    Routes through resona.lift.carleman_gf — library primitive.
+    Returns (coeffs, evaluate) where evaluate(x_tuple) reproduces fn on all inputs."""
+    coeffs, evaluate = resona_lift.carleman_gf(2, N, fn_tuple)
+    return coeffs.astype(np.int8), evaluate
 
 
 def poly_eval_bool(coeffs, basis, x_bits):
@@ -177,18 +143,20 @@ if __name__ == "__main__":
     print(f"  Precompute multiplication table ({M}x{M}={M*M} entries): {t_table*1e3:.2f} ms  [ONCE]")
     print()
 
-    # Define test functions
-    majority = lambda *b: 1 if sum(b) > N // 2 else 0
+    # Define test functions (two forms: *b for brute_force_tt; tuple for carleman_gf)
+    majority_star = lambda *b: 1 if sum(b) > N // 2 else 0
+    majority_tup  = lambda x: 1 if sum(x) > N // 2 else 0
     rng = np.random.default_rng(42)
     rand_tt_ref = rng.integers(0, 2, size=2**N, dtype=np.int8)
-    rand_fn = lambda *b: int(rand_tt_ref[sum((b[i] << i) for i in range(N))])
+    rand_fn_star = lambda *b: int(rand_tt_ref[sum((b[i] << i) for i in range(N))])
+    rand_fn_tup  = lambda x: int(rand_tt_ref[sum((x[i] << i) for i in range(N))])
 
     tests = [
-        ("AND(x0,x1,x2)",     lambda *b: b[0] & b[1] & b[2]),
-        ("OR(x0,x1,x2)",      lambda *b: b[0] | b[1] | b[2]),
-        ("XOR(x0,x1,x2)",     lambda *b: b[0] ^ b[1] ^ b[2]),
-        ("MAJORITY(6 vars)",  majority),
-        ("RANDOM function",   rand_fn),
+        ("AND(x0,x1,x2)",    lambda *b: b[0] & b[1] & b[2], lambda x: x[0] & x[1] & x[2]),
+        ("OR(x0,x1,x2)",     lambda *b: b[0] | b[1] | b[2], lambda x: x[0] | x[1] | x[2]),
+        ("XOR(x0,x1,x2)",    lambda *b: b[0] ^ b[1] ^ b[2], lambda x: x[0] ^ x[1] ^ x[2]),
+        ("MAJORITY(6 vars)", majority_star, majority_tup),
+        ("RANDOM function",  rand_fn_star,  rand_fn_tup),
     ]
 
     total_solve_ms = 0.0
@@ -198,19 +166,20 @@ if __name__ == "__main__":
           f"{'SAT?':>5}  errors vs brute")
     print("  " + "-" * 74)
 
-    for name, fn in tests:
-        # Brute-force truth table
-        tt_ref = brute_force_tt(fn, N)
+    inputs_all = list(iproduct(range(2), repeat=N))
+    for name, fn_star, fn_tup in tests:
+        # Brute-force truth table (lex order matching iproduct / carleman_gf)
+        tt_ref = np.array([fn_star(*x) & 1 for x in inputs_all], dtype=np.int8)
 
-        # Lift: solve for polynomial coefficients
+        # Lift: solve for polynomial coefficients via resona.lift.carleman_gf
         t0 = time.perf_counter()
-        coeffs = truth_table_to_coeffs(tt_ref, basis, N)
+        coeffs, evaluate = truth_table_to_coeffs(fn_tup, N)
         t_solve = time.perf_counter() - t0
         total_solve_ms += t_solve * 1e3
 
-        # Evaluate full truth table from coefficients
+        # Evaluate full truth table from library evaluate (basis-agnostic)
         t0 = time.perf_counter()
-        tt_lift = full_truth_table(coeffs, basis, N)
+        tt_lift = np.array([evaluate(x) for x in inputs_all], dtype=np.int8)
         t_query = time.perf_counter() - t0
         total_query_ms += t_query * 1e3
 

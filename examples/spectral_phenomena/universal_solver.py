@@ -28,6 +28,14 @@ Krylov precision.  For moderate-N well-conditioned SPD operators (as here),
 both paths achieve 14+ digit accuracy.
 
 Run:   python3 examples/spectral_phenomena/universal_solver.py
+
+Note on resona.defect (Richardson/defect calculus):
+  This file does not hand-roll a Richardson or defect step.  The two harvest
+  paths — (1) eigenbasis precompute + O(N) per-solve, (2) resona.apply Krylov
+  per RHS — both achieve machine precision directly.  Richardson extrapolation
+  (resona.defect.richardson) is for the pattern P_n → P_{2n} at two spatial
+  resolutions; the resolvent harvest here uses a single precomputed eigenbasis
+  and a single Krylov run, not a resolution doubling.  No refactoring needed.
 """
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))

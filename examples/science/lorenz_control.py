@@ -37,6 +37,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 import numpy as np
 from scipy import linalg
 import resona
+from resona import wkernel as wk  # noqa: F401 — library primitive (not used here; see note)
 
 # ── Lorenz Jacobian ────────────────────────────────────────────────────────────
 def lorenz_jacobian(sigma, rho, beta, fp=1):
@@ -57,7 +58,13 @@ def eigvals_sorted(sigma, rho, beta, fp=1):
     return np.sort_complex(linalg.eigvals(J))
 
 def build_W_kernel(sigma, rho, beta, fp=1, eps=1e-3):
-    """W[i,j] = d(Re lambda_i)/d(param_j).  Params: sigma, rho, beta."""
+    """W[i,j] = d(Re lambda_i)/d(param_j).  Params: sigma, rho, beta.
+
+    NOTE: resona.wkernel (Hellmann-Feynman v^T B v) requires A(k) = A0 + sum k_j B_j.
+    The Lorenz Jacobian is nonlinear in (sigma, rho, beta) — dJ/dparam depends on
+    the fixed-point coordinates which themselves shift with params — so the operator
+    is not of that affine form.  Finite differences remain the correct approach here.
+    """
     lam0 = eigvals_sorted(sigma, rho, beta, fp)
     W = np.zeros((3, 3))
     for j, (ds, dr, db) in enumerate([(eps,0,0),(0,eps,0),(0,0,eps)]):

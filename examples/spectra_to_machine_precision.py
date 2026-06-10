@@ -9,6 +9,15 @@ the targeted eigenvalues to machine precision — all the operator ever needs is
 matvec.
 
 Run:  python3 examples/spectra_to_machine_precision.py
+
+Note on resona.defect (Richardson/defect calculus):
+  This file achieves machine precision via shifted inverse iteration +
+  Rayleigh-quotient updates (cubic convergence), NOT a Richardson step.
+  Richardson extrapolation (resona.defect.richardson) applies when you have
+  the same quantity evaluated at two resolutions n and 2n and the error scales
+  as n^{-p}; here each eigenvalue is polished from a single Ritz seed by
+  Krylov refinement, so there is no n/2n pair to hand to richardson().
+  No refactoring needed.
 """
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))

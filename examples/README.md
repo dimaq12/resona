@@ -55,6 +55,7 @@ python3 examples/<dir>/<name>.py
 | 🎯 `universal_solver.py` | precompute the response field → instant solves (harvest) | 10,000 solves, **2.6e-15** residual |
 | `arithmetic_manifold.py` | 12 bit-ops self-cluster by spectral fingerprint | silhouette 0.40 (partial, honest) |
 | 🎯 `affine_flow.py` | exact exp(dt·J) flow for stiff/non-normal ODEs (`apply`) | accuracy 38–141× BE (timing caveat) |
+| 🎯 `free_probability.py` | free cumulants, freeness criterion, R-transform additivity | R add. 9e-4; freeness 1e-4 vs 3.0 |
 
 ## science/ — spectral lens on real physics
 | file | what | metric |
@@ -72,6 +73,14 @@ python3 examples/<dir>/<name>.py
 | `sacred_constants.py` | 100+ math constants as one operator (toy) | eff_rank 20.5/115 in log-space |
 
 ---
+
+**Library, not boilerplate.** The examples call the theory modules
+(`resona.wkernel/lift/beta/defect/free`) rather than re-deriving them — e.g.
+`many_body_spectrum` uses `resona.beta`, the graph/Kepler demos use
+`resona.wkernel`, the logic demos use `resona.lift.carleman_gf`,
+`free_probability` uses `resona.free`. Where a demo's structure genuinely doesn't
+fit a primitive (Lorenz's parameter-nonlinear Jacobian; Rayleigh-polish vs
+Richardson), the script says so instead of forcing it.
 
 **Honesty.** The underlying algorithms (SLQ, Lanczos, Arnoldi, Hutchinson,
 free probability, Carleman lift, length-squared sampling, Tarjan/k-core) are

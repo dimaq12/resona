@@ -43,8 +43,8 @@ import sys, os, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 import numpy as np
 from scipy import sparse as sp
-from scipy.stats import beta as beta_dist
 import resona
+from resona import beta as resona_beta  # library primitive: replaces local beta_spectrum
 
 
 def build_tfim(n, h):
@@ -61,18 +61,6 @@ def build_tfim(n, h):
     cols = np.concatenate([states ^ (1 << i) for i in range(n)])
     Hx = sp.coo_matrix((-np.ones(D * n), (rows, cols)), shape=(D, D)).tocsr()
     return (sp.diags(diag) + h * Hx).tocsr()
-
-
-def beta_spectrum(E0, Emax, mu1, mu2, D):
-    """Two moments + support → the full Beta spectrum (maximum-entropy closure)."""
-    span = Emax - E0
-    m1 = (mu1 - E0) / span                                 # mean on [0,1]
-    m2 = (mu2 - 2 * E0 * mu1 + E0 ** 2) / span ** 2        # 2nd moment on [0,1]
-    var = max(m2 - m1 ** 2, 1e-12)
-    c = m1 * (1 - m1) / var - 1                            # Beta concentration
-    a, b = max(m1 * c, 1e-2), max((1 - m1) * c, 1e-2)
-    levels = E0 + span * beta_dist.ppf((np.arange(D) + 0.5) / D, a, b)
-    return levels, a, b
 
 
 if __name__ == "__main__":
@@ -97,7 +85,7 @@ if __name__ == "__main__":
         s = resona.of(matvec, D, k=min(80, D - 2), probes=8)
         E0, Emax = s.extreme()
         mu1, mu2 = s.moment(1) / D, s.moment(2) / D         # per-dimension moments
-        approx, a, b = beta_spectrum(E0, Emax, mu1, mu2, D)
+        approx, (a, b) = resona_beta.beta_spectrum(E0, Emax, mu1, mu2, D, return_params=True)
         t_res = time.perf_counter() - t1
 
         mae = 100 * np.mean(np.abs(exact - approx)) / (Emax - E0)

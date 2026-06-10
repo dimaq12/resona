@@ -32,6 +32,7 @@ import numpy as np
 from scipy import sparse
 from scipy.sparse.linalg import eigsh
 import resona
+from resona import wkernel as wk  # spectral Jacobian primitive: W[k,e] = v_k^T B_e v_k
 
 rng = np.random.default_rng(7)
 
@@ -72,14 +73,8 @@ def edge_laplacians(N: int) -> list:
 # ---------------------------------------------------------------------------
 
 def spectral_jacobian(eigvecs: np.ndarray, edge_laps: list, K: int) -> np.ndarray:
-    """J[k, e] = dλ_k/dw_e = φ_k^T (dL/dw_e) φ_k  — cost: O(K·E) dot products."""
-    K_act, E = eigvecs.shape[1], len(edge_laps)
-    J = np.zeros((K_act, E))
-    for e, dLe in enumerate(edge_laps):
-        for k in range(K_act):
-            phi = eigvecs[:, k]
-            J[k, e] = float(phi @ (dLe @ phi))
-    return J
+    """J[k, e] = dλ_k/dw_e — routed through resona.wkernel (Hellmann-Feynman)."""
+    return wk.wkernel(eigvecs, edge_laps)
 
 
 # ---------------------------------------------------------------------------

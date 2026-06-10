@@ -34,6 +34,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 import numpy as np
 import resona
+from resona import wkernel as wk  # spectral Jacobian primitive: W[i,j] = v_i^T B_j v_i
 
 # ── Embedded solar system data (IAU 2012 values) ─────────────────────────────
 # name, semi-major axis (AU), orbital period (years)
@@ -80,10 +81,14 @@ coeffs  = np.polyfit(log_a, log_w, 1)
 alpha   = coeffs[0]               # measured exponent
 T2_over_a3 = T_YR**2 / A_AU**3   # Kepler ratio (should be 4*pi^2/GM = 1 in our units)
 
-# ── W-kernel: dlambda_i/d(GM) ────────────────────────────────────────────────
-# omega_i = (GM)^(1/2) * a_i^(-3/2)  →  omega_i^2 = GM * a_i^(-3)
-# d(omega_i^2)/d(GM) = a_i^(-3)  (the eigenvectors are standard basis e_i)
-W_GM = A_AU**(-3)                  # sensitivity of each eigenvalue to GM
+# ── W-kernel: dlambda_i/d(GM) via resona.wkernel ────────────────────────────
+# omega_i^2 = GM * a_i^(-3)  =>  dA/d(GM) = diag(a_i^{-3})  (B matrix).
+# Eigenvectors of diagonal A are the standard basis, so eigvecs = identity.
+# resona.wkernel computes W[i,0] = e_i^T B e_i = a_i^{-3} exactly.
+_eigvecs_id = np.eye(N)            # standard basis (eigvecs of diagonal A)
+_dA_dGM     = A_AU**(-3)           # diagonal of dA/d(GM)
+_W_mat = wk.wkernel(_eigvecs_id, [np.diag(_dA_dGM)])  # shape (N, 1)
+W_GM = _W_mat[:, 0]               # sensitivity of each eigenvalue to GM
 
 if __name__ == "__main__":
     print("=" * 68)
