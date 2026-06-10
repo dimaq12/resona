@@ -17,6 +17,8 @@ t = Spectral.of(matvec2, N)
 s.trace(np.log)                 # READ    — log|A|  (any spectral functional)
 s.density(x) ; s.moment(2) ; s.extreme()
 s.effective_rank()             # the honest cost dial (Φ₁)
+
+resona.apply(matvec, f, v)      # APPLY   — f(A)·v  (exp(tA)·v, A⁻¹·v, …): evolve PDEs
 ```
 
 ## Install
@@ -37,6 +39,7 @@ Verified against dense ground truth in [`examples/killer_tasks.py`](examples/kil
 | **Spectrum of A+B** | composed, matrix-free (Horn's problem in practice) | extreme eig to 1e-9 |
 | **Deep-net trainability** | `cond(W_L…W_1)` predicted from init, no fwd/bwd | Gaussian explodes, orthogonal ≈1 |
 | **Effective rank Φ₁** | the cost dial: structured/cheap vs full/frontier | 14 vs 466 |
+| **Nonlinear PDE (Burgers)** | lift to linear (Cole–Hopf) → `exp(tK)·v` via `resona.apply` | residual 5e-9, matrix-free |
 
 More broadly: density of states, `Tr f(A)` (log-det, `Tr A⁻¹`, partition
 functions, Schatten norms), extreme eigenvalues & spectral gaps, disorder-averaged

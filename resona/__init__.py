@@ -12,10 +12,10 @@ matrix-free — and from which every spectral functional is read.
     s.trace(f) ; s.density(x) ; s.extreme() ; s.moment(p)   # READ
     s.effective_rank()             # the honest cost dial (Φ₁)
 """
-from .spectral import Spectral
+from .spectral import Spectral, apply
 
 #: convenience: ``resona.of(matvec, N)`` == ``Spectral.of(matvec, N)``
 of = Spectral.of
 
 __version__ = "0.1.0"
-__all__ = ["Spectral", "of"]
+__all__ = ["Spectral", "of", "apply"]

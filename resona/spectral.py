@@ -122,3 +122,38 @@ class Spectral:
     def __repr__(self):
         lo, hi = self.extreme()
         return f"Spectral(N={self.N}, support=[{lo:.3g}, {hi:.3g}], eff_rank={self.effective_rank():.1f})"
+
+
+# ── APPLY (matrix function on a vector — the evolution primitive) ─────────────
+def apply(matvec, f, v, k: int = 48):
+    """f(A) · v, matrix-free, via Lanczos.
+
+    The evolution primitive: ``exp(tA)·v`` (heat / Schrödinger / diffusion),
+    ``A^{-1}·v`` (solve), ``sign(A)·v``, ``√A·v`` — any scalar function of an
+    operator applied to a vector, from matvecs only.  The engine for solving a
+    linear (or lifted-linear) PDE: lift a nonlinear PDE to a linear operator K
+    (Carleman / Koopman / Cole–Hopf) and evolve  ``u(t) = exp(tK)·u0``.
+
+    f is applied elementwise to the Ritz values; for smooth v, k≈40 reaches
+    machine precision.
+    """
+    v = np.asarray(v, float)
+    nv = np.linalg.norm(v)
+    if nv == 0:
+        return v.copy()
+    N = len(v)
+    V = np.zeros((N, k)); al = np.zeros(k); be = np.zeros(k)
+    q = v / nv; V[:, 0] = q; qprev = np.zeros(N); b = 0.0; m = k
+    for j in range(k):
+        w = matvec(q) - b * qprev
+        al[j] = float(q @ w)
+        w = w - al[j] * q
+        w -= V[:, :j + 1] @ (V[:, :j + 1].T @ w)        # full reorth
+        if j < k - 1:
+            b = float(np.linalg.norm(w))
+            if b < 1e-12:
+                m = j + 1; break
+            be[j] = b; qprev, q = q, w / b; V[:, j + 1] = q
+    T = np.diag(al[:m]) + np.diag(be[:m - 1], 1) + np.diag(be[:m - 1], -1)
+    theta, S = np.linalg.eigh(T)
+    return nv * (V[:, :m] @ (S @ (np.asarray(f(theta), float) * S[0, :])))

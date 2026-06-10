@@ -3,7 +3,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 from scipy import linalg
-from resona import Spectral
+from resona import Spectral, apply
 
 rng = np.random.default_rng(7)
 
@@ -61,3 +61,13 @@ def test_effective_rank_low_vs_full():
     s_full = Spectral.of(lambda v: full @ v, N, k=60, probes=16)
     assert s_low.effective_rank() < 0.1 * N                         # ≈ 6
     assert s_full.effective_rank() > 5 * s_low.effective_rank()     # ≈ N/2
+
+
+def test_apply_matrix_function():
+    # exp(A)·v via resona.apply vs dense expm — the PDE-evolution primitive.
+    N = 150
+    A = _sym(N) / np.sqrt(N)                              # tame spectrum
+    v = rng.standard_normal(N)
+    got = apply(lambda x: A @ x, lambda lam: np.exp(lam), v, k=80)
+    true = linalg.expm(A) @ v
+    assert np.max(np.abs(got - true)) < 1e-7 * np.linalg.norm(true)
