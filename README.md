@@ -43,6 +43,7 @@ Verified against dense ground truth in [`examples/killer_tasks.py`](examples/kil
 | **35 operators → spectra** | matrix-free Ritz seed → Rayleigh polish (the sft35 pipeline) | seed 1e-4 → **1e-16**, 99% machine-zero |
 | **Signal in noise (BBP)** | the detection threshold — does a spike detach from the bulk? | `extreme()` tracks λ=θ+1/θ above θ_c=1 |
 | **Anderson localization** | metal→insulator transition from disorder, matrix-free | Λ=∫typ/∫mean LDOS, 0.97→0.15 in 3.4s |
+| **Tracy–Widom edge** | the universal fluctuation law of `extreme()` (λ_max) | std·N^⅔→1.27, exponent −0.65 (target −⅔) |
 
 More broadly: density of states, `Tr f(A)` (log-det, `Tr A⁻¹`, partition
 functions, Schatten norms), extreme eigenvalues & spectral gaps, disorder-averaged
