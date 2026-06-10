@@ -40,6 +40,7 @@ Verified against dense ground truth in [`examples/killer_tasks.py`](examples/kil
 | **Deep-net trainability** | `cond(W_L…W_1)` predicted from init, no fwd/bwd | Gaussian explodes, orthogonal ≈1 |
 | **Effective rank Φ₁** | the cost dial: structured/cheap vs full/frontier | 14 vs 466 |
 | **Nonlinear PDE (Burgers)** | lift to linear (Cole–Hopf) → `exp(tK)·v` via `resona.apply` | residual 5e-9, matrix-free |
+| **35 operators → spectra** | matrix-free Ritz seed → Rayleigh polish (the sft35 pipeline) | seed 1e-4 → **1e-16**, 99% machine-zero |
 
 More broadly: density of states, `Tr f(A)` (log-det, `Tr A⁻¹`, partition
 functions, Schatten norms), extreme eigenvalues & spectral gaps, disorder-averaged
