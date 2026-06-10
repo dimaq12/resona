@@ -8,6 +8,10 @@ import resona
 rng = np.random.default_rng(0)
 
 
+def _sym(N):
+    M = rng.standard_normal((N, N)); return (M + M.T) / 2
+
+
 def test_beta_from_spectral():
     N = 400
     B = rng.standard_normal((N, 80)); A = (B @ B.T) / 80
@@ -118,3 +122,40 @@ def test_flow_shock_time():
     sA = resona.of(lambda v: A @ v, N, k=80, probes=8)
     tc = resona.flow.shock_time(sA)
     assert tc is not None and abs(tc - 1.0) < 0.3       # two atoms ±1 merge at t_c=1
+
+
+def test_s_transform_multiplicative():
+    M = 700; G = rng.standard_normal((M, 400)); A = (G @ G.T) / 400 + 0.3 * np.eye(M)
+    Q, _ = linalg.qr(rng.standard_normal((M, M))); B = Q @ A @ Q.T
+    sA = resona.of(lambda v: A @ v, M, k=110, probes=8)
+    sB = resona.of(lambda v: B @ v, M, k=110, probes=8)
+    evP = np.linalg.eigvals(A @ B).real
+    sP = type("o", (), {"nodes": evP, "weights": np.ones(M) / M})
+    wg = np.array([0.1, 0.2, 0.3])
+    SA = resona.lift.s_transform(sA, wg); SB = resona.lift.s_transform(sB, wg)
+    SP = resona.lift.s_transform(sP, wg)
+    assert np.max(np.abs(SP - SA * SB)) / np.max(np.abs(SP)) < 0.05   # S_{A⊠B}=S_A·S_B
+
+
+def test_cross_moment():
+    N = 400; A = _sym(N) / np.sqrt(N); B = _sym(N) / np.sqrt(N)
+    tau = resona.free.cross_moment({"A": lambda x: A @ x, "B": lambda x: B @ x},
+                                   "AB", N, probes=60)
+    assert abs(tau - np.trace(A @ B) / N) < 0.1 * abs(np.trace(A @ B) / N) + 0.02
+
+
+def test_richardson_limit():
+    f = lambda n: np.pi + 1.3 / n + 0.7 / n ** 2
+    ns = [25, 50, 100, 200]
+    lim = resona.defect.richardson_limit([f(n) for n in ns], ns, p0=1.0)
+    assert abs(lim - np.pi) < 1e-4
+
+
+def test_wkernel_design_consistency():
+    n = 140; H = rng.standard_normal((n, n)); A0 = (H + H.T) / 2
+    Bs = [np.diag((np.arange(n) == i).astype(float)) for i in range(0, n, 20)]
+    _, V = linalg.eigh(A0)
+    W = resona.wkernel.wkernel(V[:, :len(Bs)], Bs)               # square
+    target = rng.standard_normal(len(Bs)) * 0.05
+    dk = resona.wkernel.design(W, target)
+    assert np.max(np.abs(W @ dk - target)) < 1e-9                # solves W·dk=target

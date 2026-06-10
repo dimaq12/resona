@@ -49,6 +49,22 @@ def free_cumulants(moments):
     return kappa[1:]
 
 
+def moments_from_cumulants(kappa):
+    """Inverse of free_cumulants: moments m_1..m_N from free cumulants κ.
+
+    Solves M(z) = 1 + Σ κ_n zⁿ M(z)ⁿ order by order — the other direction of the
+    moment↔free-cumulant bijection.
+    """
+    kap = list(kappa); N = len(kap); m = [1.0]
+    for j in range(1, N + 1):
+        s = 0.0
+        mm = m + [0.0] * (N - len(m) + 1)
+        for n in range(1, j + 1):
+            s += kap[n - 1] * _trunc_pow(mm, n, N)[j - n]
+        m.append(s)
+    return m[1:]
+
+
 def _htrace(matvec, N, probes, rng):
     """Hutchinson estimate of Tr(matvec) with Rademacher probes."""
     acc = 0.0

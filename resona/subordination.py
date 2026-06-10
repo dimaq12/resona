@@ -15,13 +15,7 @@ slows to a crawl at the spectral EDGE (critical slowing) — the defect / edge o
 chaos of free probability's own computation.
 """
 import numpy as np
-from .lift import _nw
-
-
-def cauchy(spectral, z):
-    """Cauchy/Stieltjes transform G(z) = Σ w_i/(z − λ_i) (complex z allowed)."""
-    nodes, w = _nw(spectral); w = w / w.sum()
-    return np.sum(w / (z - nodes))
+from .lift import _nw, cauchy            # cauchy lives in lift (the transform module)
 
 
 def pastur(GA, z, sigma2, iters=2000, tol=1e-13, damp=0.5):
@@ -47,27 +41,5 @@ def averaged_dos(spectral, sigma, xs, eta=1e-3):
         g = pastur(GA, x + 1j * eta, s2)
         out[i] = max(-g.imag / np.pi, 0.0)
     return out
-
-
-def free_add_semicircle_moments(spectral, sigma, order=4):
-    """Moments m_n of μ_A ⊞ semicircle(σ²).  m1 = m1(A); m2 = m2(A) + σ²; …
-    (the semicircle of variance σ² contributes only κ₂ = σ²)."""
-    from .lift import _nw
-    nodes, w = _nw(spectral); w = w / w.sum()
-    mA = [float(np.sum(w * nodes ** n)) for n in range(1, order + 1)]
-    from .free import free_cumulants
-    from .lift import carleman_scalar  # noqa: F401  (kept import graph explicit)
-    kap = np.array(free_cumulants(mA))
-    if len(kap) >= 2:
-        kap[1] += sigma ** 2                       # ⊞ semicircle adds κ₂ = σ²
-    from .free import _trunc_pow
-    # moments from cumulants: M(z) = 1 + Σ κ_n zⁿ M(z)ⁿ
-    m = [1.0]
-    N = len(kap)
-    for j in range(1, N + 1):
-        s = 0.0
-        mm = m + [0.0] * (N - len(m) + 1)
-        for n in range(1, j + 1):
-            s += kap[n - 1] * _trunc_pow(mm, n, N)[j - n]
-        m.append(s)
-    return m[1:]
+    # (the moment version μ_A ⊞ semicircle is just resona.lift.free_convolution
+    #  with a semicircle, or read off as m₂ = m₂(A) + σ² — no separate function.)

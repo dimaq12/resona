@@ -57,22 +57,6 @@ def s_transform(s, w):
     return S1(float(w)) if np.isscalar(w) else np.array([S1(float(x)) for x in w])
 
 
-def moments_from_cumulants(kappa):
-    """Inverse of free.free_cumulants: moments m_1..m_N from free cumulants κ.
-
-    Solves M(z) = 1 + Σ κ_n zⁿ M(z)ⁿ order by order.
-    """
-    from .free import _trunc_pow
-    kap = list(kappa); N = len(kap); m = [1.0]
-    for j in range(1, N + 1):
-        s = 0.0
-        mm = m + [0.0] * (N - len(m) + 1)
-        for n in range(1, j + 1):
-            s += kap[n - 1] * _trunc_pow(mm, n, N)[j - n]
-        m.append(s)
-    return m[1:]
-
-
 def free_convolution(sA, sB, order=6):
     """Moments of  A ⊞ B  (free additive convolution) from the two spectra ALONE.
 
@@ -85,7 +69,7 @@ def free_convolution(sA, sB, order=6):
     Accuracy is set by the input moments: exact-in / exact-out, but HIGH orders
     are sensitive — with noisy SLQ input keep order ≲ 4 (or pass accurate moments).
     """
-    from .free import free_cumulants
+    from .free import free_cumulants, moments_from_cumulants
     nA, wA = _nw(sA); wA = wA / wA.sum()
     nB, wB = _nw(sB); wB = wB / wB.sum()
     mA = [float(np.sum(wA * nA ** n)) for n in range(1, order + 1)]

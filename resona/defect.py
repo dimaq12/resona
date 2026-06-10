@@ -39,18 +39,15 @@ def richardson_limit(values, ns, p0=1.0):
     Returns the top-of-tableau estimate of the limit.
     """
     v = [np.asarray(x, float) for x in values]
-    ns = list(ns)
-    L = len(v)
+    ns = list(ns); L = len(v)
     T = [v[:]]                                              # T[0] = raw column
     for col in range(1, L):
-        prev = T[col - 1]
-        newcol = []
-        for k in range(L - col):
-            r = (ns[k + col] / ns[k]) ** (p0 * col)         # ratio of resolutions^p
-            newcol.append((r * prev[k + 1] - prev[k]) / (r - 1.0))
-        newcol = [None] * col + newcol
+        prev = T[col - 1]; newcol = [None] * L
+        for k in range(col, L):
+            r = (ns[k] / ns[k - col]) ** (p0 * col)         # ratio of resolutions^p
+            newcol[k] = (r * prev[k] - prev[k - 1]) / (r - 1.0)
         T.append(newcol)
-    return T[-1][-1]
+    return T[L - 1][L - 1]
 
 
 def defect_jump(D_n, J, n):

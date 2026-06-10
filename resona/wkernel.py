@@ -34,11 +34,6 @@ def wkernel(eigvecs, perturbations):
     return W
 
 
-def predict_shift(W, dk):
-    """First-order spectral shift Δλ ≈ W · dk for a parameter step dk."""
-    return W @ np.asarray(dk, float)
-
-
 def design(W, target_shift, rcond=None):
     """Least-squares parameter step dk so that W·dk ≈ target_shift (λ_target − λ_0).
 
