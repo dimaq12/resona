@@ -17,7 +17,7 @@ Plus the honest cost dial:
 from __future__ import annotations
 import numpy as np
 
-__all__ = ["Spectral"]
+__all__ = ["Spectral", "apply", "local_spectrum", "local_density"]
 
 
 def _lanczos(matvec, v0, k):
@@ -184,3 +184,29 @@ def apply(matvec, f, v, k: int = 48, hermitian: bool = True):
     fHe1 = W @ (np.asarray(f(vals), complex) * c)
     out = nv * (Q[:, :m] @ fHe1)
     return out
+
+
+# ── LOCAL response (probe the operator from a CHOSEN vector, not random) ──────
+def local_spectrum(matvec, v, k: int = 48):
+    """The local spectral measure seen from vector v:  μ_v = Σ_i |⟨v|ψ_i⟩|² δ(λ_i).
+
+    One Lanczos from v → Ritz nodes + first-component² weights.  This is the
+    vector-resolved response; with v = e_i it is the LOCAL density of states
+    (LDOS) at site i.  ``Spectral.of`` averages this over random v (→ the trace);
+    here you choose v.  Returns (nodes, weights), weights summing to ‖v‖²-norm 1.
+    """
+    v = np.asarray(v, float)
+    al, be = _lanczos(matvec, v, k)
+    kk = len(al)
+    T = np.diag(al) + np.diag(be[:kk - 1], 1) + np.diag(be[:kk - 1], -1)
+    theta, S = np.linalg.eigh(T)
+    return theta, S[0, :] ** 2
+
+
+def local_density(matvec, v, xs, k: int = 48, eta: float = 0.1):
+    """LDOS / vector-resolved density  ρ_v(x) = Σ_i |⟨v|ψ_i⟩|² · L_η(x − λ_i),
+    a Lorentzian-smoothed local_spectrum (matrix-free, one Lanczos from v)."""
+    theta, w = local_spectrum(matvec, v, k)
+    xs = np.asarray(xs, float)
+    return (w[None, :] * (eta / np.pi)
+            / ((xs[:, None] - theta[None, :]) ** 2 + eta ** 2)).sum(1)

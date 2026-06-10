@@ -35,7 +35,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 import numpy as np
 from math import gcd
-from scipy.linalg import hankel, svdvals
+import resona                                          # cost.lift_rank = Φ₁ of the trajectory
 
 
 def order(a, N, cap=10 ** 7):
@@ -59,18 +59,6 @@ def factor_via_order(N):
     return None
 
 
-def phi1_hankel(seq, k=60):
-    """Φ₁ = effective rank of the sequence's Hankel (trajectory) operator.
-
-    Identical to resona's effective_rank participation ratio, applied to the
-    singular values of the Hankel matrix:  Φ₁ = (Σσ²)² / Σσ⁴  ∈ [1, k].
-    """
-    seq = np.asarray(seq, float)
-    seq = (seq - seq.mean()) / (seq.std() + 1e-12)
-    s2 = svdvals(hankel(seq[:k], seq[k - 1:2 * k - 1])) ** 2
-    return float(s2.sum() ** 2 / (s2 ** 2).sum())
-
-
 if __name__ == "__main__":
     print("=" * 70)
     print("THE SHOR WALL — period finding, and the Φ₁ structure dial")
@@ -87,8 +75,8 @@ if __name__ == "__main__":
     print("\n  (B) the Φ₁ dial on a^x mod N (large order) vs a structured sequence:")
     N = 100003 * 100019                                            # ~10^10, large order
     k = 60
-    phi_shor = phi1_hankel([pow(3, x, N) for x in range(130)], k)
-    phi_struct = phi1_hankel([np.sin(2 * np.pi * x / 7) for x in range(130)], k)
+    phi_shor = resona.cost.lift_rank([pow(3, x, N) for x in range(130)], k)
+    phi_struct = resona.cost.lift_rank([np.sin(2 * np.pi * x / 7) for x in range(130)], k)
     print(f"      {'sequence':>26} {('Φ₁ (eff. rank, max=%d)' % k):>24}")
     print(f"      {'a^x mod N (Shor target)':>26} {phi_shor:>20.1f}   ← ~10× higher: no handle")
     print(f"      {'periodic (period 7)':>26} {phi_struct:>20.1f}   ← low: we harvest it")

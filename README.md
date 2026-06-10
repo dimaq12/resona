@@ -54,7 +54,8 @@ spectral functional of a (possibly composed) operator you can only matvec.
 
 - **PROBE** — `Spectral.of(matvec, N)`: stochastic Lanczos quadrature →
   Ritz nodes (the "frequencies") + weights (the "amplitudes"). Cost `O(probes·k)`
-  matvecs.
+  matvecs. (`local_density(matvec, v)` probes from a *chosen* vector instead of
+  random ones — the LDOS / vector-resolved response.)
 - **COMPOSE** — `s + t`, `s @ t`: `A+B`, `A·B` without forming or diagonalizing
   them (the free-convolution theorem; exact closure `(A+B)x = Ax + Bx`).
 - **READ** — `trace`, `moment`, `density`, `extreme`: any spectral functional.

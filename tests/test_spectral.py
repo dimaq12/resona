@@ -88,3 +88,16 @@ def test_apply_general_nonsymmetric_and_complex():
     true = linalg.expm(-1j * 0.5 * H) @ psi
     assert np.max(np.abs(got - true)) < 1e-9 * np.linalg.norm(true)
     assert abs(np.linalg.norm(got) - np.linalg.norm(psi)) < 1e-9 * np.linalg.norm(psi)  # unitary
+
+
+def test_local_density_ldos():
+    # LDOS at site i of a diagonal operator is a Lorentzian at d_i, mass 1.
+    N = 200; d = rng.standard_normal(N); A = np.diag(d)
+    e = np.zeros(N); e[3] = 1.0
+    xs = np.linspace(d.min() - 1, d.max() + 1, 2000)
+    from resona import local_density, local_spectrum
+    r = local_density(lambda v: A @ v, e, xs, k=120, eta=5e-3)
+    assert abs(np.trapezoid(r, xs) - 1.0) < 0.02            # probability measure
+    assert abs(xs[np.argmax(r)] - d[3]) < 0.05             # peaks at the site's level
+    nodes, w = local_spectrum(lambda v: A @ v, e, k=120)
+    assert abs(w.sum() - 1.0) < 1e-9                        # weights sum to ‖e‖²=1

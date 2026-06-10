@@ -34,7 +34,7 @@ import sys, os, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 from scipy import sparse
-from resona.spectral import _lanczos                  # resona's own Lanczos kernel
+import resona                                          # local_density = the response probed at one site
 
 rng = np.random.default_rng(5)
 
@@ -53,19 +53,13 @@ def hopping_3d(L):
 
 
 def ldos_site(matvec, N, i, k, Egrid, eta):
-    """ρ_i(E) — local DOS at site i = resona's response probed at e_i (matrix-free).
+    """ρ_i(E) — local DOS at site i = resona's response PROBED AT e_i (matrix-free).
 
-    The Ritz weights of a Lanczos run started at e_i are |⟨i|ψ_n⟩|²; smoothing
-    them with a Lorentzian of width η is exactly `resona.density` at one site.
+    `resona.local_density` runs one Lanczos from the site vector e_i; its Ritz
+    weights are |⟨i|ψ_n⟩|² — exactly the local spectral density.
     """
     v0 = np.zeros(N); v0[i] = 1.0
-    al, be = _lanczos(matvec, v0, k)
-    kk = len(al)
-    T = np.diag(al) + np.diag(be[:kk - 1], 1) + np.diag(be[:kk - 1], -1)
-    theta, S = np.linalg.eigh(T)
-    w = S[0, :] ** 2                                   # local weights |⟨i|ψ_n⟩|²
-    return (w[None, :] * (eta / np.pi)
-            / ((Egrid[:, None] - theta[None, :]) ** 2 + eta ** 2)).sum(1)
+    return resona.local_density(matvec, v0, Egrid, k=k, eta=eta)
 
 
 def order_parameter(A0, W, L, n_sites=60, k=70, eta=0.15, nE=121):
