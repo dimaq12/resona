@@ -41,6 +41,8 @@ Verified against dense ground truth in [`examples/killer_tasks.py`](examples/kil
 | **Effective rank Φ₁** | the cost dial: structured/cheap vs full/frontier | 14 vs 466 |
 | **Nonlinear PDE (Burgers)** | lift to linear (Cole–Hopf) → `exp(tK)·v` via `resona.apply` | residual 5e-9, matrix-free |
 | **35 operators → spectra** | matrix-free Ritz seed → Rayleigh polish (the sft35 pipeline) | seed 1e-4 → **1e-16**, 99% machine-zero |
+| **Signal in noise (BBP)** | the detection threshold — does a spike detach from the bulk? | `extreme()` tracks λ=θ+1/θ above θ_c=1 |
+| **Anderson localization** | metal→insulator transition from disorder, matrix-free | Λ=∫typ/∫mean LDOS, 0.97→0.15 in 3.4s |
 
 More broadly: density of states, `Tr f(A)` (log-det, `Tr A⁻¹`, partition
 functions, Schatten norms), extreme eigenvalues & spectral gaps, disorder-averaged
