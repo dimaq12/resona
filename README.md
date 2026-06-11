@@ -112,6 +112,8 @@ the defect = shock = edge identity, and the Extraction Law — is in
 [`theory/`](theory/). The intellectual claims are stated honestly in
 [`NOVELTY.md`](NOVELTY.md); what building it revealed — the open conjectures and a
 research log that records the **failures** too — is in [`FRONTIER.md`](FRONTIER.md).
+The cost (big-O, matrix-free vs dense, measured slopes) of every method is in
+[`COMPLEXITY.md`](COMPLEXITY.md).
 
 ## License
 
