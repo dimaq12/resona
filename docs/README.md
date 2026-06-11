@@ -1,0 +1,62 @@
+# resona — how-to (the cookbook)
+
+Task-oriented guides: **find your task in the table, copy the recipe, follow the
+guide, read the full example.**  Every recipe is matrix-free unless noted — you
+supply a `matvec` (a function `v → A·v`), never a matrix.
+
+```python
+import numpy as np, resona
+matvec = lambda v: A @ v          # your operator, however you can apply it
+```
+
+## I want to…
+
+| I want to… | recipe | guide | full example |
+|------------|--------|:-----:|--------------|
+| compute `log\|A\|`, `Tr A⁻¹`, `Tr f(A)` without forming A | `resona.of(mv,N).trace(f)` | [reading-spectra](reading-spectra.md) | [`killer_tasks.py`](../examples/killer_tasks.py) |
+| get the density of states / spectrum shape | `resona.of(mv,N).density(xs)` | [reading-spectra](reading-spectra.md) | [`signals.py`](../examples/signals.py) |
+| get the largest/smallest eigenvalue | `resona.of(mv,N).extreme()` | [reading-spectra](reading-spectra.md) | [`spike_detection.py`](../examples/spike_detection.py) |
+| grade a problem's structure / cost (Φ₁) | `resona.of(mv,N).effective_rank()` | [measuring-difficulty](measuring-difficulty.md) | [`killer_tasks.py`](../examples/killer_tasks.py) |
+| solve `A x = b` matrix-free | `resona.apply(mv, lambda l: 1/l, b)` | [solving-and-evolving](solving-and-evolving.md) | [`spectral_phenomena/universal_solver.py`](../examples/spectral_phenomena/universal_solver.py) |
+| evolve a (linear) PDE `u_t = A u` | `resona.apply(mv, lambda l: np.exp(t*l), u0)` | [solving-and-evolving](solving-and-evolving.md) | [`nonlinear_pde.py`](../examples/nonlinear_pde.py) |
+| simulate quantum dynamics `e^{-iHt}ψ` | `resona.apply(mv, lambda l: np.exp(-1j*t*l), psi, hermitian=False)` | [solving-and-evolving](solving-and-evolving.md) | [`quantum/`](../examples/quantum/) |
+| solve a NONLINEAR PDE | lift → `resona.apply` | [lifting-nonlinear](lifting-nonlinear.md) | [`nonlinear_pde.py`](../examples/nonlinear_pde.py) |
+| denoise a signal / image | `resona.apply(L, lowpass, x)` | [solving-and-evolving](solving-and-evolving.md) | [`image_anomaly.py`](../examples/image_anomaly.py) |
+| get the spectrum of `A+B` without forming it | `(sA + sB).extreme()` | [composing-operators](composing-operators.md) | [`killer_tasks.py`](../examples/killer_tasks.py) |
+| compose two spectra you measured separately | `resona.lift.free_convolution(sA,sB)` | [composing-operators](composing-operators.md) | [`spectral_phenomena/free_convolution_flow.py`](../examples/spectral_phenomena/free_convolution_flow.py) |
+| disorder-average a DOS (no realizations) | `resona.subordination.averaged_dos(sA,σ,xs)` | [composing-operators](composing-operators.md) | [`anderson_localization.py`](../examples/anderson_localization.py) |
+| recover the operator from its spectrum | `resona.from_eigenbasis(λ,V)` / `from_measure(λ,w)` | [inverse-problems](inverse-problems.md) | [`inverse_spectral.py`](../examples/inverse_spectral.py) |
+| design parameters to hit a target spectrum | `resona.wkernel.design(W, Δλ, reg=…)` | [inverse-problems](inverse-problems.md) | [`graphs/inverse_graph_design.py`](../examples/graphs/inverse_graph_design.py) |
+| linearize a nonlinear ODE / logic function | `resona.lift.carleman_scalar / carleman_gf` | [lifting-nonlinear](lifting-nonlinear.md) | [`logic/`](../examples/logic/) |
+| tell if a problem is tractable or a wall | `resona.cost.is_extractable(signal)` | [measuring-difficulty](measuring-difficulty.md) | [`spectral_phenomena/extraction_law.py`](../examples/spectral_phenomena/extraction_law.py) |
+| detect a planted signal in noise | `resona.of(mv,N).extreme()` (BBP) | [reading-spectra](reading-spectra.md) | [`spike_detection.py`](../examples/spike_detection.py) |
+
+## The mental model
+
+Three verbs on one object — the operator's **spectral response**:
+
+```
+        PROBE                      READ                       COMPOSE
+   resona.of(matvec,N)  ─────▶  .trace/.density/.extreme   sA + sB ,  sA @ sB
+        │  (matrix-free, the matvec is the only cost)         │
+        │                                                     ▼
+        └────────────▶  resona.apply(matvec,f,v)  ────▶  f(A)·v  (solve / evolve / filter)
+```
+
+Plus the **theory modules** (`wkernel`, `lift`, `beta`, `defect`, `free`,
+`subordination`, `cost`, `flow`) and the **inverse** (`from_measure`,
+`from_eigenbasis`) — see the guides.
+
+## Conventions & gotchas (read once)
+
+- **You supply a matvec**, not a matrix. Sparse/implicit operators are the point.
+- **Forward is matrix-free and cheap** (cost = the matvec); **inverse is polynomial
+  in N** — see [`COMPLEXITY.md`](../COMPLEXITY.md).
+- **`hermitian=False`** in `apply` for non-symmetric operators or complex `f`
+  (quantum `e^{-iHt}`); the default symmetric path is cheapest.
+- **Honest limits** are stated in each guide (conditioning, regularization,
+  approximation order) — resona reports the real number, never a headline.
+
+The references for full, runnable, *verified* implementations are the
+[`examples/`](../examples/) (see [`examples/README.md`](../examples/README.md));
+the theory behind each is in [`THEORY.md`](../THEORY.md).

@@ -8,18 +8,22 @@
 One object. Three verbs. No matrix is ever formed; `eig` is never called.
 
 ```python
-from resona import Spectral
+import numpy as np, resona
 
-s = Spectral.of(matvec, N)      # PROBE   — harvest the operator's response
-t = Spectral.of(matvec2, N)
+s = resona.of(matvec, N)        # PROBE   — harvest the operator's response
+t = resona.of(matvec2, N)
 (s + t).extreme()               # COMPOSE — eig(A+B), A+B never formed
 (s @ t)                         #           A·B
 s.trace(np.log)                 # READ    — log|A|  (any spectral functional)
 s.density(x) ; s.moment(2) ; s.extreme()
-s.effective_rank()             # the honest cost dial (Φ₁)
+s.effective_rank()              # the honest cost dial (Φ₁)
 
 resona.apply(matvec, f, v)      # APPLY   — f(A)·v  (exp(tA)·v, A⁻¹·v, …): evolve PDEs
 ```
+
+**New here?** → the **[how-to cookbook](docs/README.md)**: find your task in the
+"I want to…" table, copy the recipe, follow the guide. The [`examples/`](examples/)
+are the full, verified reference implementations.
 
 ## Install
 
