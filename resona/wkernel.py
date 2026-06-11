@@ -34,11 +34,21 @@ def wkernel(eigvecs, perturbations):
     return W
 
 
-def design(W, target_shift, rcond=None):
-    """Least-squares parameter step dk so that W·dk ≈ target_shift (λ_target − λ_0).
+def design(W, target_shift, reg=0.0, rcond=None):
+    """Parameter step dk so that W·dk ≈ target_shift (λ_target − λ_0).
 
     One Hellmann–Feynman design step — no finite differences, no per-parameter
     eigensolve.  Iterate (recompute W at the new k) for nonlinear targets.
+
+    reg > 0 adds TIKHONOV regularization (relative to the largest singular value²):
+    dk = Σ s_i/(s_i²+reg·s_max²) (u_iᵀy) v_i.  This is the bias–variance dial of an
+    ILL-POSED inverse (e.g. inverse spectral / conductivity): reg=0 is the exact
+    least-squares step (machine-precise when well-posed, but blows up on
+    rank-deficient / under-determined W); reg>0 is bounded and ROBUST, recovering a
+    SMOOTHED solution — the trade-off a regularized full-response inverse makes.
     """
-    dk, *_ = np.linalg.lstsq(W, np.asarray(target_shift, float), rcond=rcond)
-    return dk
+    W = np.asarray(W, float); y = np.asarray(target_shift, float)
+    if reg <= 0:
+        return np.linalg.lstsq(W, y, rcond=rcond)[0]
+    U, s, Vt = np.linalg.svd(W, full_matrices=False)
+    return Vt.T @ ((s / (s ** 2 + reg * s[0] ** 2)) * (U.T @ y))

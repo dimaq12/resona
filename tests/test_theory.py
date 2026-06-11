@@ -159,3 +159,14 @@ def test_wkernel_design_consistency():
     target = rng.standard_normal(len(Bs)) * 0.05
     dk = resona.wkernel.design(W, target)
     assert np.max(np.abs(W @ dk - target)) < 1e-9                # solves W·dk=target
+
+
+def test_wkernel_design_tikhonov():
+    n = 20; W = rng.standard_normal((n, n)); y = rng.standard_normal(n)
+    dk0 = resona.wkernel.design(W, y, reg=0.0)
+    assert np.max(np.abs(W @ dk0 - y)) < 1e-9                      # exact (full rank)
+    reg = 1e-2; dk = resona.wkernel.design(W, y, reg=reg)
+    smax2 = np.linalg.svd(W, compute_uv=False)[0] ** 2
+    resid = (W.T @ W + reg * smax2 * np.eye(n)) @ dk - W.T @ y     # normal equations
+    assert np.max(np.abs(resid)) < 1e-8
+    assert np.linalg.norm(dk) < np.linalg.norm(dk0) + 1e-9         # regularized = smaller
