@@ -169,6 +169,33 @@ These two — *"tractable = a lift-rank"* and *"cost = criticality at Σ*"* — 
 only candidates here that could become a genuine paper, and only if the
 universality experiment is carried out honestly.
 
+## 4. Beyond catastrophe — the spectral monodromy, and a second hardness axis
+
+The catastrophe stratification (§3) is the LOCAL picture.  Beneath it is one
+object: the eigenvalues of a parameter family form a branched **Riemann surface**,
+and its **MONODROMY** (how they permute around a branch point) carries both faces
+of hardness.  Demonstrated in `theory/monodromy_galois.py`:
+
+- **LOCAL = catastrophe.** Looping around an Arnold A_q stratum permutes the q
+  colliding eigenvalues in a single **q-cycle** (fold→2-cycle, cusp→3-cycle,
+  swallowtail→4-cycle, butterfly→5-cycle) — the same q whose conditioning is
+  `dist^{-(1-1/q)}`.
+- **GLOBAL = Galois.** The monodromy GROUP (all based loops) is the **Galois group**
+  of the characteristic polynomial; by **Abel–Ruffini** it decides solvability.
+  Measured: `λ⁵+b` → one 5-cycle → `C₅` → SOLVABLE (eigenvalues are radicals);
+  generic `λ⁵+…+b` → four distinct transpositions spanning all 5 sheets → `S₅` →
+  UNSOLVABLE (no closed form, you *must* iterate).
+
+So spectral monodromy gives **two orthogonal axes of hardness**: SENSITIVITY (local
+catastrophe / conditioning) and EXPRESSIBILITY (global Galois / solvability).
+
+*Honest:* every ingredient is classical and deep (the braid-group monodromy of the
+discriminant complement; the Galois group of the characteristic polynomial;
+Abel–Ruffini).  The contribution is the *framing* — the spectral monodromy as the
+single object behind both the catastrophe-hardness law and a solvability axis.  A
+demonstration, not a theorem.  Open: tie the Galois axis to actual numerical cost
+(unsolvable ⇏ ill-conditioned — they are genuinely orthogonal), and the D/E series.
+
 ---
 
 *Everything above is synthesis of established results (Voiculescu, Speicher,
