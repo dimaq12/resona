@@ -17,7 +17,7 @@ Plus the honest cost dial:
 from __future__ import annotations
 import numpy as np
 
-__all__ = ["Spectral", "apply", "local_spectrum", "local_density", "from_measure"]
+__all__ = ["Spectral", "apply", "local_spectrum", "local_density", "from_measure", "from_eigenbasis"]
 
 
 def _lanczos(matvec, v0, k):
@@ -226,3 +226,21 @@ def from_measure(nodes, weights, k=None):
     """
     lam = np.asarray(nodes, float); w = np.asarray(weights, float)
     return _lanczos(lambda x: lam * x, np.sqrt(np.clip(w, 0.0, None)), k or len(lam))
+
+
+def from_eigenbasis(eigenvalues, eigenvectors):
+    """Reconstruct a Jacobi (tridiagonal) operator's band from its FULL
+    eigendecomposition A = V·diag(λ)·Vᵀ — EXACT (machine precision) for ANY
+    operator, sharp or smooth, because it reads the tridiagonal entries of VΛVᵀ
+    directly:
+
+        diag_j = Σ_i λ_i v_i[j]² ,    off_j = Σ_i λ_i v_i[j] v_i[j+1].
+
+    Unlike `from_measure` (ONE boundary probe — compressed, but ill-conditioned
+    for sharp operators because far-from-boundary modes are invisible), this uses
+    the FULL eigenbasis (every eigenvector component), so it is well-conditioned
+    everywhere — at the cost of needing the whole spectral data, not just the
+    boundary measure.  Returns (diag, off-diagonal).
+    """
+    lam = np.asarray(eigenvalues, float); V = np.asarray(eigenvectors, float)
+    return (V * V) @ lam, (V[:-1, :] * V[1:, :]) @ lam

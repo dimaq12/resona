@@ -112,3 +112,15 @@ def test_from_measure_inverts_of():
     al, be = from_measure(lam, w)
     assert np.max(np.abs(al - d)) < 1e-7            # diagonal
     assert np.max(np.abs(be - e)) < 1e-7            # |off-diagonal| (positive gauge)
+
+
+def test_from_eigenbasis_exact():
+    # full eigenbasis reconstructs the tridiagonal band of V diag(lam) V^T exactly,
+    # for ANY operator (sharp or smooth) — machine precision.
+    N = 40; d = rng.standard_normal(N); e = rng.uniform(0.3, 1.0, N - 1)
+    A = np.diag(d) + np.diag(e, 1) + np.diag(e, -1)
+    lam, V = np.linalg.eigh(A)
+    from resona import from_eigenbasis
+    diag_h, off_h = from_eigenbasis(lam, V)
+    assert np.max(np.abs(diag_h - d)) < 1e-12
+    assert np.max(np.abs(off_h - e)) < 1e-12
