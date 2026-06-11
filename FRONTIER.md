@@ -106,8 +106,19 @@ Calibrated honesty means recording the negative results too.
     square-root-edge class, by a different mechanism (Krylov, not conditioning).
   *Honest:* both exponents are CLASSICAL (Vishik–Lyusternik/Lidskii EP perturbation;
   Kaniel–Paige–Saad). What the experiment supports is the **unification** — one
-  cost exponent set by the singularity type. Still open: the multi-parameter
-  catastrophe stratification, and a rigorous lower bound.
+  cost exponent set by the singularity type.
+- **Catastrophe STRATIFICATION — DEMONSTRATED** (`theory/catastrophe_hardness.py`).
+  The follow-up that was "still open" above. On a 2-parameter family (companion of
+  `λ³+aλ+b`, discriminant the cuspoid `4a³+27b²=0`) the exponent is `½` at FIVE
+  different generic points of the smooth fold edge and JUMPS to `⅔` at the cusp
+  point — so `b` is an invariant of the catastrophe STRATUM, not the path. And the
+  Arnold A-series ladder (companion of `λ^q+s`) realizes the full ladder
+  `b = 1−1/q`: fold ½, cusp ⅔ (0.665), swallowtail ¾ (0.745), butterfly ⅘ (0.791).
+  **Computational hardness inherits the Arnold A-series.** *Honest:* the per-stratum
+  exponents are Lidskii, the stratification is Arnold — the *unified law* (hardness
+  = catastrophe-stratum invariant) is the claim; still open: a rigorous
+  algorithm-independent lower-bound theorem, the D/E series, large (non-companion)
+  operators, and the bridge from conditioning to actual solver cost.
 - **Verified (unchanged, in `tests/` and `theory/`):** W=Φ bridge (`1e-13`),
   freeness defect (free `1e-3` vs non-free `28`, ratio `6143×`), R-transform
   additivity (`1e-14`), free CLT (`κ₄·K≈−1`), shock at `t_c=1`, Pastur `m₂`
@@ -137,10 +148,13 @@ critical slowing of fixed-point iteration near a branch point; per-field cost la
 now measured cleanly** — `b_q = 1−1/q` for `q=2..5`, and the Hermitian edge gives
 the q=2 exponent `½` as a real Lanczos cost (§2, `theory/hardness_exponents.py`).
 The exponents themselves are classical; what is supported is the **quantization of
-hardness by singularity type**. Still **unproven**: that this is a full Arnold
-catastrophe stratification (the multi-parameter strata — cusp `⅔` from a genuine
-3-fold coalescence, not just an algebraic order-3 EP), and a rigorous
-algorithm-independent lower bound.
+hardness by singularity type**. The full Arnold catastrophe **stratification is now
+DEMONSTRATED** (`theory/catastrophe_hardness.py`, see §2): on one 2-parameter
+discriminant the exponent is `½` along the fold edge and jumps to `⅔` at the cusp,
+and the A-series ladder gives `½, ⅔, ¾, ⅘` for fold/cusp/swallowtail/butterfly —
+**computational hardness inherits the Arnold A-series**. Still **unproven**: a
+rigorous algorithm-independent lower-bound theorem, the D/E series, large
+(non-companion) operators, and the bridge to actual solver cost.
 
 ### What would turn this from rhetoric into a result
 
