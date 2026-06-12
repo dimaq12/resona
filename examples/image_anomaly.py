@@ -6,6 +6,10 @@ of the region's PATCH COVARIANCE — which reads spatial GEOMETRY (structured �
 low Φ₁; noise ⇒ high Φ₁), not just brightness.  Matrix-free, with the shuffle
 control built in (shuffle destroys geometry ⇒ Φ₁ jumps).
 
+Sister example of signals.py: the SAME covariance-operator recipe, the SAME
+hub readouts — s.effective_rank(), s.condition() (dynamic range), and the
+top-mode energy share λ_max/Tr from s.extreme()/s.moment(1).
+
 Run:  python3 examples/image_anomaly.py
 """
 import sys, os
@@ -16,8 +20,9 @@ from resona import Spectral
 rng = np.random.default_rng(0)
 
 
-def region_phi1(region, patch=8, stride=3):
-    """Φ₁ of the region's patch covariance = number of structural components."""
+def region_spectral(region, patch=8, stride=3):
+    """Spectral object of the region's patch covariance — the SAME recipe as
+    signals.py's trajectory covariance: build a matvec, hand it to the hub."""
     H, W = region.shape
     rows = []
     for i in range(0, H - patch + 1, stride):
@@ -26,8 +31,12 @@ def region_phi1(region, patch=8, stride=3):
     P = np.asarray(rows, float)                       # (n_patches, patch²)
     P = P - P.mean(0)
     d = P.shape[1]
-    s = Spectral.of(lambda v: P.T @ (P @ v), d, k=40, probes=10)   # covariance, matrix-free
-    return s.effective_rank()
+    return Spectral.of(lambda v: P.T @ (P @ v), d, k=40, probes=10)   # covariance, matrix-free
+
+
+def region_phi1(region, patch=8, stride=3):
+    """Φ₁ of the region's patch covariance = number of structural components."""
+    return region_spectral(region, patch, stride).effective_rank()
 
 
 def structured_patch(n):
@@ -56,6 +65,21 @@ if __name__ == "__main__":
           f"(jumps toward noise → Φ₁ measures GEOMETRY, not the histogram)")
     print(f"   geometry signal: structured {phi_struct:.1f} vs shuffled {phi_struct_shuf:.1f} "
           f"(Δ = {phi_struct_shuf-phi_struct:+.1f})")
+
+    # hub readouts on the same operators — the signals.py covariance family:
+    # κ = s.condition() (dynamic range) and the top-mode energy share
+    # λ_max/Tr (= s.extreme()[1] / s.moment(1)) tell the Φ₁ story twice over.
+    print(f"\n   hub readouts (same patch-covariance operators, signals.py family):")
+    print(f"   {'region':<12} {'Φ₁':>6}  {'κ = λmax/λmin':>14}  {'top-mode share':>15}")
+    for tag, region in [("noise", noise), ("structured", struct),
+                        ("shuffled", flat.reshape(n, n))]:
+        s = region_spectral(region)
+        share = s.extreme()[1] / s.moment(1)
+        print(f"   {tag:<12} {s.effective_rank():>6.1f}  {s.condition():>14.1f}  "
+              f"{share:>14.1%}")
+    print(f"   (structured: one mode carries most of the energy → tiny Φ₁, huge κ;")
+    print(f"    noise/shuffled: energy spreads over ~all 64 modes → flat spectrum)")
+
     print("\n   → one primitive, any image, matrix-free, control built in.")
     print("     (a full anomaly MAP = region_phi1 over a sliding grid.)")
     print("=" * 64)

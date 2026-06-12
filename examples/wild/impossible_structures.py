@@ -20,11 +20,20 @@ WHAT.  Three data structures that sound absurd but work:
     Recovery via resona.extreme() to confirm the spectral gap, then
     scipy.sparse.linalg.eigsh for precision extraction.
 
-resona's ROLE.  For structure (c), resona.of(...).extreme() is called on
-the matrix matvec to (1) confirm the planted spectral gap (λ₁ - λ₂ >> 0)
-and (2) read the leading eigenvalue — exactly the signal that Lanczos
-resolves first, matrix-free.  This mirrors the BBP spike-detection story:
-here we plant the spike ourselves and use resona to certify it's visible.
+resona's ROLE.
+(a) The sort is certified spectrally: input and output multisets are wrapped
+    as atomic spectral measures (resona.Spectral) and their moments compared —
+    equal moments ⇔ the permutation preserved the spectrum.
+(b) The hash IS a resona read: the Rayleigh quotient is exactly the k=1
+    Lanczos node, so lookup = resona.local_spectrum(matvec, key, k=1); the
+    full local measure (k>1) explains WHY random keys collide.
+(c) resona.of(...).extreme() is called on the matrix matvec to (1) confirm
+    the planted spectral gap (λ₁ - λ₂ >> 0) and (2) read the leading
+    eigenvalue — exactly the signal that Lanczos resolves first, matrix-free.
+    A resona-only recovery path (solve.rayleigh_polish + a spectral projector
+    via resona.apply) extracts the secret with zero bit errors, no eigsh.
+    This mirrors the BBP spike-detection story: here we plant the spike
+    ourselves and use resona to certify it's visible.
 
 Run:  python3 examples/wild/impossible_structures.py
 """
@@ -74,6 +83,16 @@ for i in range(1, N_q):
 sort_error   = float(np.max(np.abs(out1 - np.sort(query))))
 sort_correct = sort_error < 1e-12
 
+# resona certificate: sorting is a SPECTRUM-PRESERVING permutation.  Wrap the
+# query multiset and the sorted output as atomic spectral measures and compare
+# trace moments — equal moments (p=1..4) ⇔ equal multisets (up to fp roundoff).
+s_query = resona.Spectral(query, np.full(N_q, 1.0 / N_q), N=N_q)
+s_out1  = resona.Spectral(out1,  np.full(N_q, 1.0 / N_q), N=N_q)
+moment_mismatch = max(
+    abs(s_query.moment(p) - s_out1.moment(p)) / max(abs(s_query.moment(p)), 1e-300)
+    for p in (1, 2, 3, 4))
+multiset_ok = moment_mismatch < 1e-12
+
 # ═══════════════════════════════════════════════════════════════════════
 # (b) SPECTRAL HASH TABLE
 # ═══════════════════════════════════════════════════════════════════════
@@ -83,9 +102,13 @@ Q2, _ = np.linalg.qr(rng.standard_normal((N2, N2)))
 A2    = Q2 @ np.diag(np.arange(1, N2 + 1, dtype=float)) @ Q2.T
 
 def spectral_hash(x, A, n_buckets):
-    """Rayleigh quotient → bucket index in [0, n_buckets)."""
-    rq = float(x @ A @ x) / float(x @ x)
-    return int(np.clip(round(rq) - 1, 0, n_buckets - 1))
+    """Rayleigh quotient → bucket index in [0, n_buckets).
+
+    The Rayleigh quotient IS resona's k=1 Lanczos read: local_spectrum(mv, x, k=1)
+    returns the single Ritz node θ₀ = x·Ax / x·x (exactly equivalent to the
+    hand-rolled quotient — one matvec, no matrix function beyond that)."""
+    nodes, _ = resona.local_spectrum(lambda y: A @ y, x, k=1)
+    return int(np.clip(round(float(nodes[0])) - 1, 0, n_buckets - 1))
 
 n_keys = 60
 keys2    = [rng.standard_normal(N2) for _ in range(n_keys)]
@@ -98,6 +121,14 @@ test_key = keys2[0]
 test_bucket_stored   = buckets2[0]
 test_bucket_lookup   = spectral_hash(test_key, A2, N2)
 lookup_correct       = (test_bucket_stored == test_bucket_lookup)
+
+# WHY so many collisions?  The full local spectral measure of a random key
+# (resona.local_spectrum at k>1) spreads its weight over many eigenvalues, so
+# the Rayleigh quotient concentrates near the spectral mean — the diffuseness
+# of mu_key is the collision mechanism, read off the same primitive.
+loc_nodes, loc_w = resona.local_spectrum(lambda y: A2 @ y, test_key, k=12)
+loc_top_w   = float(loc_w.max() / loc_w.sum())
+loc_n_nodes = int(np.sum(loc_w > 0.01 * loc_w.sum()))
 
 # ═══════════════════════════════════════════════════════════════════════
 # (c) INVISIBLE STORE — secret as leading eigenvector
@@ -142,6 +173,19 @@ bits_rec   = (aligned > thr).astype(int)
 bit_errors = int(np.sum(bits_rec != secret_bits.astype(int)))
 secret_recovered = (corr > 0.999)
 
+# resona-ONLY recovery path (no eigsh): polish λ_max from the Ritz seed to
+# machine precision (solve.rayleigh_polish), then extract the leading
+# eigenvector with a spectral projector f(A) = 1[λ > 500] applied to a
+# deterministic probe vector via resona.apply — the gap does all the work.
+lam_polished = resona.solve.rayleigh_polish(H3, lam_hi3)
+proj_v       = resona.apply(H3_matvec, lambda lam: (lam > 500.0).astype(float),
+                            np.ones(N3), k=40)
+rec_res      = proj_v / np.linalg.norm(proj_v)
+corr_res     = float(abs(np.dot(secret_norm, rec_res)))
+aligned_res  = np.sign(np.dot(rec_res, secret_norm)) * rec_res
+bits_res     = (aligned_res > aligned_res.max() / 2.0).astype(int)
+bit_errors_res = int(np.sum(bits_res != secret_bits.astype(int)))
+
 elapsed = time.perf_counter() - t0
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -156,12 +200,19 @@ print(f"    Reference: N={N_ref} Gaussian.  Query: N={N_q} Exponential(2).")
 print(f"    Sort error (max |out - np.sort(query)|) = {sort_error:.2e}")
 print(f"    Verdict: {'EXACT sort (0 error)' if sort_correct else f'error={sort_error:.2e}'}  {'[PASS]' if sort_correct else '[FAIL]'}")
 print(f"    Cost: {N_q} binary searches (no query-query comparisons during ranking)")
+print(f"    resona certificate (Spectral moments p<=4): max rel mismatch = "
+      f"{moment_mismatch:.2e}  -> multiset preserved {'[PASS]' if multiset_ok else '[FAIL]'}")
 
 print("\n(b) SPECTRAL HASH TABLE")
 print(f"    A = {N2}x{N2} matrix, eigenvalues 1..{N2}.  {n_keys} keys hashed.")
 print(f"    Distinct buckets: {n_distinct} / {N2}.  Collisions: {n_collisions}")
 print(f"    Lookup check: stored bucket={test_bucket_stored}, re-lookup={test_bucket_lookup}  {'[PASS]' if lookup_correct else '[FAIL]'}")
-print(f"    Mechanism: x^T A x / x^T x → nearest integer eigenvalue index.")
+print(f"    Mechanism: x^T A x / x^T x → nearest integer eigenvalue index")
+print(f"               (= the k=1 Lanczos node from resona.local_spectrum).")
+print(f"    Collision diagnosis (local_spectrum, k=12): test key spreads over "
+      f"{loc_n_nodes} Ritz nodes,")
+print(f"    max weight {loc_top_w:.2f} — diffuse measures pile up near the "
+      f"spectral mean, hence {n_collisions} collisions.")
 
 print("\n(c) INVISIBLE STORE")
 print(f"    Secret: {int(secret_bits.sum())} ones in {N3} bits, hidden as leading eigenvector.")
@@ -170,6 +221,11 @@ print(f"    resona.extreme(): λ_max = {lam_hi3:.1f}, λ_min = {lam_lo3:.1f}")
 print(f"    Planted spectral gap (λ₁ - λ₂) = {spectral_gap:.1f}")
 print(f"    Recovery |cos θ| = {corr:.6f}  (1.0 = perfect)")
 print(f"    Bit errors after recovery: {bit_errors} / {N3}  {'[PASS]' if secret_recovered else '[FAIL]'}")
+print(f"    resona-only path: rayleigh_polish λ = {lam_polished:.10f} "
+      f"(err {abs(lam_polished - 1000.0):.1e}),")
+print(f"      spectral projector via resona.apply: |cos θ| = {corr_res:.6f}, "
+      f"bit errors {bit_errors_res} / {N3}  "
+      f"{'[PASS]' if (corr_res > 0.999 and bit_errors_res == 0) else '[FAIL]'}")
 
 print(f"\n  Total elapsed: {elapsed:.2f}s  (<1s target: {'YES' if elapsed < 1.0 else 'NO'})")
 print("=" * 70)

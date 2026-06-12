@@ -167,6 +167,29 @@ if __name__ == "__main__":
     print(f"\n  effective_rank  < N  → sort uses far fewer spectral modes than naively expected")
     print(f"  This is the defect's spectral signature: concentrated response, not diffuse.")
 
+    # ── the pseudospectrum: where the sort's NON-NORMAL defect actually lives ──
+    # The raw comparison operator C is strictly triangular in value order =
+    # NILPOTENT: its spectrum is the single point {0} — yet it sorts.  The
+    # ε-pseudospectrum blooms that point into a disk of radius ε^{1/q} (the
+    # bloom law of resona.defect): the spectrum lies, the pseudospectrum is
+    # the truth about a defective operator.
+    from resona.defect import pseudospectrum_radius
+    eps = 1e-6
+    print(f"\n  Pseudospectrum of the (nilpotent) comparison operator, ε={eps:.0e}:")
+    print(f"  {'q (Jordan)':>11s}  {'radius':>8s}  {'ε^(1/q)':>8s}     ← the bloom law, exact")
+    for q in (2, 3, 5):
+        J = np.zeros((q, q)); J[np.arange(q - 1), np.arange(1, q)] = 1.0
+        print(f"  {q:>11d}  {pseudospectrum_radius(J, eps):>8.4f}  {eps ** (1.0/q):>8.4f}")
+    arr = rng.permutation(50).astype(float)
+    C = comparison_operator(arr, n_passes=50)
+    Cn = C / np.linalg.norm(C, 2)
+    spec_rad = float(np.max(np.abs(np.linalg.eigvals(C))))
+    rad = pseudospectrum_radius(Cn, eps, z0=0.0, r_max=2.0)
+    q_eff = np.log(eps) / np.log(rad)
+    print(f"\n  sort operator C (N=50): spectrum radius = {spec_rad:.1f}  (exactly nilpotent)")
+    print(f"  but ε-pseudospectrum radius of C/‖C‖ = {rad:.4f}  → effective defect order q ≈ {q_eff:.1f}")
+    print(f"  the spectrum says 'nothing there'; the pseudospectrum is where sorting LIVES.")
+
     print("\n" + "=" * 70)
     print("  RESULT: zero mismatches.  The defect velocity field partitions")
     print("  frozen-tail (correctly placed) from flowing-head (placed by value rank).")

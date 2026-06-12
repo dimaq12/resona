@@ -30,6 +30,13 @@ matvec = lambda v: A @ v          # your operator, however you can apply it
 | linearize a nonlinear ODE / logic function | `resona.lift.carleman_scalar / carleman_gf` | [lifting-nonlinear](lifting-nonlinear.md) | [`logic/`](../examples/logic/) |
 | tell if a problem is tractable or a wall | `resona.cost.is_extractable(signal)` | [measuring-difficulty](measuring-difficulty.md) | [`spectral_phenomena/extraction_law.py`](../examples/spectral_phenomena/extraction_law.py) |
 | detect a planted signal in noise | `resona.of(mv,N).extreme()` (BBP) | [reading-spectra](reading-spectra.md) | [`spike_detection.py`](../examples/spike_detection.py) |
+| polish ONE eigenvalue to machine precision | `resona.solve.rayleigh_polish(mv, seed, N=N)` | [precision-and-defects](precision-and-defects.md) | [`spectra_to_machine_precision.py`](../examples/spectra_to_machine_precision.py) |
+| solve a CLUSTERED / near-degenerate root problem fully | `resona.solve.catastrophe_solve(coeffs)` | [precision-and-defects](precision-and-defects.md) | [`spectra_to_machine_precision.py`](../examples/spectra_to_machine_precision.py) |
+| know if my eigenvalue is trustworthy (non-normal defect) | `resona.defect.pseudospectrum_radius(A, ε, z0=λ)` | [precision-and-defects](precision-and-defects.md) | [`spectral_phenomena/nonnormal_convergence.py`](../examples/spectral_phenomena/nonnormal_convergence.py) |
+| predict whether GMRES will stall | `resona.defect.sigma_min(A, 0)` + the bloom | [precision-and-defects](precision-and-defects.md) | [`spectral_phenomena/nonnormal_convergence.py`](../examples/spectral_phenomena/nonnormal_convergence.py) |
+| tell integrable from chaotic (is there a lift?) | `resona.cost.level_spacing_ratio(λ)` | [measuring-difficulty](measuring-difficulty.md) | [`quantum/integrability_detector.py`](../examples/quantum/integrability_detector.py) |
+| find conserved charges blind | `resona.lift.conserved_charge(H, basis)` | [lifting-nonlinear](lifting-nonlinear.md) | [`quantum/integrability_detector.py`](../examples/quantum/integrability_detector.py) |
+| get a condition number matrix-free (a LOWER bound; `polish=True` for exact edges) | `resona.of(mv,N).condition()` | [measuring-difficulty](measuring-difficulty.md) | [`killer_tasks.py`](../examples/killer_tasks.py) |
 
 ## The mental model
 
@@ -43,8 +50,18 @@ Three verbs on one object — the operator's **spectral response**:
         └────────────▶  resona.apply(matvec,f,v)  ────▶  f(A)·v  (solve / evolve / filter)
 ```
 
+Everything else reads off the same object — the `Spectral` hub:
+
+```python
+s.boxplus(t)                  # A ⊞ B at the measure level (no joint matvec)
+s.cauchy(z); s.r(w); s.s(w)   # the lifted coordinates (R linearizes ⊞, S linearizes ⊠)
+s.cumulants(); s.flow(t, xs); s.shock_time()
+s.levels(N)                   # whole spectrum from 4 numbers (Beta closure)
+s.effective_rank(); s.condition()
+```
+
 Plus the **theory modules** (`wkernel`, `lift`, `beta`, `defect`, `free`,
-`subordination`, `cost`, `flow`) and the **inverse** (`from_measure`,
+`subordination`, `cost`, `flow`, `solve`) and the **inverse** (`from_measure`,
 `from_eigenbasis`) — see the guides.
 
 ## Conventions & gotchas (read once)

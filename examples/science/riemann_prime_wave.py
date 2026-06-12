@@ -15,12 +15,17 @@ WHY IT IS GENUINELY INTERESTING.  This is NOT an analogy — it is a rigorous
 identity (the von Mangoldt explicit formula, proved ~1895).  The primes encode
 the zeta zeros, and vice versa, through a spectral duality.
 
-resona's ROLE.  The prime-wave function F(omega) is treated as the diagonal of a
-convolution operator on the "log-prime" lattice: A * x[k] = sum_p w_p * x[k + log(p)]
-(a weighted shift operator).  resona.of(matvec, N) probes its spectrum via
-stochastic Lanczos quadrature; the resulting spectral density concentrates near
-the zeta-zero frequencies.  The extreme eigenvalues bracket the active spectral
-range; the density evaluated on a fine omega grid reveals the zero positions.
+resona's ROLE.  The explicit formula IS a trace formula, and resona computes it
+as one: the primes define an atomic spectral measure mu = sum_p (log p / sqrt p)
+* delta(log p), wrapped as a resona.Spectral object, and the prime wave is its
+trace read  F(omega) = Tr cos(omega * A) = mu.trace(cos(omega * .)) — the same
+sum, evaluated through the library's measure API.  Separately, the prime-shift
+operator on the log-prime lattice: A * x[k] = sum_p w_p * x[k + log(p)] (a
+weighted shift operator) is probed by resona.of(matvec, N) via stochastic
+Lanczos quadrature, plus a vector-resolved read (resona.local_spectrum) showing
+the DC mode saturating the measure.  Finally resona.cost.level_spacing_ratio
+tests the famous GUE statistics of the zeros (Montgomery-Odlyzko) on both the
+true zeros and our detected peaks.
 
 HONESTY CAVEAT.  The peak-finding matches zeta zeros well for the LOWER zeros
 (gamma < 60) where F(omega) has high signal-to-noise, and degrades for higher
@@ -52,13 +57,22 @@ def sieve(n):
         if s[i]: s[i*i::i] = False
     return np.where(s)[0]
 
-def prime_wave(omega_vals, p_max=2000):
-    """F(omega) = sum_p log(p)/sqrt(p) * cos(omega * log(p))."""
+def prime_measure(p_max=2000):
+    """The von Mangoldt prime measure  mu = sum_p (log p/sqrt p) * delta(log p),
+    as a resona.Spectral object (atoms = log p, weights = log p/sqrt p).
+    With N=1 the trace read is the plain weighted sum over the atoms."""
     primes = sieve(p_max).astype(float)
     lp = np.log(primes)
     w  = lp / np.sqrt(primes)           # weights log(p)/sqrt(p)
-    # shape: (len(omega), len(primes))
-    return (w * np.cos(np.outer(omega_vals, lp))).sum(axis=1)
+    return resona.Spectral(lp, w, N=1)
+
+def prime_wave(omega_vals, p_max=2000):
+    """F(omega) = sum_p log(p)/sqrt(p) * cos(omega * log(p))
+                = Tr cos(omega*A)  for  A = diag(log p) with von Mangoldt weights.
+    Computed as a resona spectral-measure trace read — the explicit formula is
+    literally a trace formula (identical arithmetic to the direct sum)."""
+    mu = prime_measure(p_max)
+    return np.array([mu.trace(lambda lam: np.cos(o * lam)) for o in omega_vals])
 
 def find_peaks(y, x, min_gap=1.0, rel_thresh=0.08):
     """Local maxima of |y| above threshold, separated by min_gap."""
@@ -111,6 +125,14 @@ if __name__ == "__main__":
     print(f"  resona: spectral support [{lo:.4f}, {hi:.4f}], eff_rank={eff_r:.1f}")
     print(f"  (eff_rank ~ 1 confirms strong concentration = low-rank prime structure)")
 
+    # Vector-resolved read: the local measure seen from the uniform (DC) vector.
+    loc_nodes, loc_w = resona.local_spectrum(mv, np.ones(N_op), k=64)
+    i_top = int(np.argmax(loc_w))
+    print(f"  local_spectrum from the uniform vector: {loc_w[i_top]/loc_w.sum():.1%}"
+          f" of the measure sits on lambda = {loc_nodes[i_top]:.4f}")
+    print(f"  (the DC mode saturates the shift operator — the same concentration,"
+          f" vector-resolved)")
+
     # ── compute F(omega) on a dense grid ─────────────────────────────────────
     omega = np.arange(10.0, 105.0, 0.02)
     F     = prime_wave(omega, P_MAX)
@@ -141,6 +163,14 @@ if __name__ == "__main__":
     r = np.corrcoef(ZETA_ZEROS[:common], peak_omegas[:common])[0, 1]
     mean_d = np.mean(deltas) if deltas else float("nan")
 
+    # ── GUE statistics (Montgomery–Odlyzko) via resona.cost ──────────────────
+    # The zeta zeros famously repel like GUE eigenvalues.  resona's integrability
+    # detector reads the mean consecutive spacing ratio <r> (single sequence =
+    # single symmetry sector, so the sector caveat is satisfied).
+    from resona import cost as rcost
+    r_zeros = rcost.level_spacing_ratio(ZETA_ZEROS)
+    r_peaks = rcost.level_spacing_ratio(peak_omegas)
+
     print(f"\n  METRICS:")
     print(f"    Primes used          : {len(primes)}")
     print(f"    Peaks found          : {n_peaks}")
@@ -148,6 +178,10 @@ if __name__ == "__main__":
     print(f"    Mean |delta| matched : {mean_d:.3f}")
     print(f"    Pearson r (zeros vs peaks, n={common}): {r:.4f}")
     print(f"    resona eff_rank      : {eff_r:.2f}")
+    print(f"    <r> spacing ratio (resona.cost): zeros = {r_zeros:.3f}, "
+          f"detected peaks = {r_peaks:.3f}")
+    print(f"    (GUE 0.600 / Poisson 0.386; n=30 is a small sample — suggestive,"
+          f" not a measurement)")
     print()
     print("  HONESTY NOTE: correlation r~0.999 is achievable only with ~10000+")
     print("  primes; with 303 primes up to 2000 the lower zeros match well,")

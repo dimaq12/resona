@@ -72,6 +72,19 @@ when an associated rank saturates — see
 - **Cole–Hopf** is exact for Burgers but ill-conditioned at tiny viscosity (sharp
   shocks).
 
+## Does a lift exist? — find the charges, blind
+
+```python
+charges, comm_norms = resona.lift.conserved_charge(H, basis)
+# comm_norms[j] = ‖[H,Q_j]‖/‖Q_j‖ ascending;  < 1e-7 ⇒ a genuine conserved charge
+```
+
+A lift exists ⟺ enough conserved charges.  The commutator-Gram search FINDS
+them with no prior knowledge (energy, total Z, free-fermion bilinears for an
+integrable chain) and honestly returns none beyond H for a chaotic one.
+Heavy tool: it forms `[H, O_a]` — `O(|basis|·dim²)`; see
+[`examples/quantum/integrability_detector.py`](../examples/quantum/integrability_detector.py).
+
 ## Worked examples
 
 - **Burgers (Cole–Hopf)** — [`examples/nonlinear_pde.py`](../examples/nonlinear_pde.py)

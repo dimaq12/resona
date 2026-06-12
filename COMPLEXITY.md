@@ -11,14 +11,17 @@ slopes (measured `time ∝ N^s` on tridiagonal operators, N=64…512) are in **b
 
 | method | time | data | matrix-free | notes |
 |--------|------|------|:-----------:|-------|
-| `of(matvec,N,k,p)` | `O(p·k·C + p·k²)` — **N^0.2 (flat)** | matvec | ✓ | SLQ; cost is the matvec, not N |
+| `of(matvec,N,k,p)` | `O(p·k·C + p·k²)` — **N^0.2 (flat)** | matvec | ✓ | SLQ; cost is the matvec, not N.  If the matvec maps blocks (`A@X`, verified automatically, N≥1000), all p probes ride ONE block matvec per step — BLAS-3, ~2–4× measured |
 | `apply(matvec,f,v,k)` | `O(k·C + k²·N)` (+`k³` Arnoldi) — **N^0.2** | matvec | ✓ | f(A)·v; solve/evolve |
 | `local_spectrum / local_density` | `O(k·C + k²·N)` | matvec, one probe | ✓ | one Lanczos from a chosen v |
 | `moment / trace / extreme / effective_rank / density` | `O(p·k)` | the nodes/weights | ✓ | reads of's output |
 | `free.freeness_defect / cross_moment` | `O(p·|word|·C)` | matvec | ✓ | Hutchinson |
 | `subordination.pastur` | `O(iters·N)` per z | spectrum (nodes,w) | ✓* | scalar fixed point |
-| `subordination.averaged_dos / flow.burgers_density` | `O(n_x·iters·N)` | spectrum | ✓* | over an x-grid |
-| `flow.shock_time` | `O(n_t·n_x·iters·N)` | spectrum | ✓* | scans t |
+| `subordination.pastur_grid / averaged_dos / flow.burgers_density` | `O(iters·n_x·p·k)` vectorized | spectrum | ✓* | whole x-grid in ONE damped iteration with an active mask (~10× the scalar loop), same fixed point & tol |
+| `flow.shock_time` | `O(n_t · averaged_dos)` | spectrum | ✓* | scans t (measured 31 s → 2.2 s on the vectorized grid) |
+| `defect.sigma_min(matvec,z)` | `O(k·C)` (2N realified Lanczos) | matvec (+rmatvec) | ✓ | dense path: one SVD `O(N³)`, exact |
+| `defect.pseudospectrum_radius` | `O(iters·sigma_min)` | matvec (+rmatvec) | ✓ | log-bisection on the bloom, ~60 σ_min calls |
+| `cost.level_spacing_ratio(λ)` | `O(N log N)` | eigenvalues | — | 3 lines; resolve symmetry sectors first |
 
 `✓*` = matrix-free given the spectrum, which `of` reads matrix-free.
 
@@ -39,7 +42,10 @@ only → needs regularization (bounded but biased).  *Difficulty = data discarde
 
 | method | time | notes |
 |--------|------|-------|
-| `lift.r_transform / s_transform` | `O(n_w·N·root)` | per w: a root-find over `G(z)=Σw/(z−λ)` |
+| `lift.r_transform / s_transform` | `O(110·n_w·p·k)` | vectorized bisection over `G(z)=Σw/(z−λ)`, ALL w at once (~4× the per-point root-find, tighter than brentq) |
+| `lift.conserved_charge(H, basis)` | `O(|basis|·D²·ω)` commutators + `O(|basis|³)` eigh | dense H; the honest heavy tool — it FORMS `[H,O_a]` |
+| `solve.catastrophe_solve` | float64 `np.roots` + `mp.polyroots` at `dps=q·target` | budget auto-set by the detected cluster order q |
+| `solve.rayleigh_polish` | `O(iters·N³)` dense solve / `O(iters·k·C)` minres | cubic convergence: iters ≈ 4–6 |
 | `lift.free_convolution` | `O(order³)` | cumulants ↔ moments, small `order` |
 | `lift.carleman_scalar` | `O(order²)` build + `apply` | polynomial-ODE lift |
 | `lift.carleman_gf(p,n,·)` | `O(M³)`, `M=pⁿ` (numpy-vectorized, ~20× the Python loop) | exact GF(p) logic lift; the one genuinely heavy kernel |

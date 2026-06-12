@@ -67,8 +67,16 @@ spectral functional of a (possibly composed) operator you can only matvec.
   them (the free-convolution theorem; exact closure `(A+B)x = Ax + Bx`).
 - **READ** — `trace`, `moment`, `density`, `extreme`: any spectral functional.
 
-Plus the **cost dial** `effective_rank()` (`Φ₁`) — low ⇒ structured/cheap;
-high ⇒ near the genuine frontier — and the *Extraction Law* it comes from.
+Plus the **cost dials** `effective_rank()` (`Φ₁`) and `condition()` — low ⇒
+structured/cheap; high ⇒ near the genuine frontier — and the *Extraction Law*
+they come from.
+
+Everything else reads off the same object (the `Spectral` **hub**):
+`s.boxplus(t)` (⊞ at the measure level), `s.cauchy(z)`, `s.r(w)`, `s.s(w)`,
+`s.cumulants()` (the lifted coordinates), `s.flow(t, xs)`, `s.shock_time()`
+(free heat flow / disorder averaging), `s.levels(N)` (the Beta closure).
+When the matvec also maps blocks (`A @ X`), probing switches to one BLAS-3
+block-Lanczos automatically — ~2–4× faster, bit-compatible.
 
 ## The theory, as first-class modules
 
@@ -82,7 +90,12 @@ tested library modules (not re-derived in each script):
   matrix exponential), `carleman_gf` (exact GF(p) logic → linear polynomial).
 - **`resona.beta`** — Beta-law closure: spectral support + 2 moments → the whole spectrum.
 - **`resona.defect`** — error-as-information: `defect`, `richardson`, `defect_jump`
-  (`D_{2n}=Jⁿ·D_n` exact).
+  (`D_{2n}=Jⁿ·D_n` exact), and the **pseudospectrum** (`pseudospectrum_radius`,
+  `sigma_min`): the ε^{1/q} bloom law of non-normal defects — where the spectrum
+  lies and GMRES actually lives.
+- **`resona.solve`** — precision on the defect's minimal support:
+  `catastrophe_solve` (order-q cluster detected → exactly q×target digits spent),
+  `rayleigh_polish` (one eigenvalue, Ritz seed → machine precision, cubic).
 - **`resona.free`** — `free_cumulants`, the `freeness` criterion (mixed cumulants
   vanish ⇔ composition closes), `cross_moment` — the response algebra's coordinates.
 - **`resona.subordination`** — disorder averaging / free addition with a semicircle
@@ -90,7 +103,12 @@ tested library modules (not re-derived in each script):
 - **`resona.lift.free_convolution`** — compose two spectra **without a joint matvec**
   (`κ_n(A⊞B)=κ_n(A)+κ_n(B)`), the measure-level version of `s + t`.
 - **`resona.cost`** — the **Extraction Law** `Cost ~ ε^{-a}·dist(z,Σ*)^{-b}`, `phi1`
-  (Φ₁), and the removable-vs-genuine classifier (`is_extractable`, lift-rank saturation).
+  (Φ₁), the removable-vs-genuine classifier (`is_extractable`, lift-rank saturation),
+  and `level_spacing_ratio` (⟨r⟩: 0.386 Poisson/integrable vs 0.531 GOE/chaotic —
+  the 3-line is-there-a-lift detector; resolve symmetry sectors first).
+- **`resona.lift.conserved_charge`** — the constructive side of the lift: a blind
+  commutator-Gram search that FINDS the conserved charges of an integrable H
+  (and honestly reports none for a chaotic one).
 - **`resona.flow`** — free convolution as the complex **Burgers** flow; `shock_time`
   finds the band-merger (defect = shock = spectral edge).
 

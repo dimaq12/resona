@@ -26,7 +26,9 @@ Poincare version has singular values consistent with Lorentz covariance.
 
 resona's ROLE.  resona.of(matvec, N) probes the spectral density of the stacked
 Jacobian M^T M; effective_rank() measures how many independent modes the EM response
-has.  The ratio of leading eigenvalues directly encodes the 4/3 discrepancy.
+has; condition() (k=2 Lanczos is exact on a 2-dim Gramian) supplies kappa(M); and
+the first trace moment Tr(M^T M) = s0^2 + s1^2 already carries the 4/3 — the ratio
+of leading eigenvalues directly encodes the discrepancy.
 
 HONESTY CAVEAT.  The "rank deficit" is a conceptual framing: in reality both matrices
 have full numerical rank (2), but the RATIO of their singular values encodes the 4/3
@@ -59,15 +61,18 @@ def stacked_jacobian(k, v_vals):
     return np.column_stack([dp_dv(v, k) for v in v_vals]).T  # shape (N, 2)
 
 def spectral_probe(M, label):
-    """Probe M^T M with resona; compute SVD analysis."""
+    """Probe M^T M with resona; SVD kept as exact cross-check."""
     MtM = M.T @ M                            # 2x2 Gramian
     s   = np.linalg.svd(M, compute_uv=False)
-    cond = s[0] / (s[1] + 1e-14)
     sp   = resona.of(lambda x: MtM @ x, 2, k=2, probes=40, seed=42)
+    # k=2 Lanczos on a 2-dim operator is EXACT: the Ritz nodes are the
+    # eigenvalues of M^T M, so the hub's condition() gives kappa(M)^2 exactly.
+    cond = np.sqrt(sp.condition())           # = s[0]/s[1] via resona.extreme()
     eff_r = sp.effective_rank()
     lo, hi = sp.extreme()
+    tr    = sp.moment(1)                     # stochastic Tr(M^T M) = s0^2 + s1^2
     return dict(s=s, cond=cond, eff_rank=eff_r, sv_lo=lo, sv_hi=hi,
-                s_ratio=s[0]/s[1])
+                s_ratio=s[0]/s[1], tr=tr)
 
 if __name__ == "__main__":
     print("=" * 68)
@@ -98,6 +103,9 @@ if __name__ == "__main__":
     print(f"    p_em/p_correct (Maxwell)  = {ratio_maxwell:.6f}  (= 4/3)")
     print(f"    p_em/p_correct (Poincare) = {ratio_poincare:.6f}  (= 1, covariant)")
     print(f"    Discrepancy               = {ratio_maxwell - ratio_poincare:.6f}  (= 1/3)")
+    print(f"    (Reframing up front: BOTH Jacobians are full rank.  The anomaly")
+    print(f"     is a spectral RATIO — a 4/3 scaling of the leading singular")
+    print(f"     value — not a rank deficit.)")
 
     print(f"\n  STACKED JACOBIAN M = [dp/dv|_v1, dp/dv|_v2, ...], shape ({N}, 2):")
     print(f"  {'Quantity':30}  {'Pure Maxwell':>14}  {'Poincare':>12}")
@@ -108,11 +116,21 @@ if __name__ == "__main__":
     print(f"  {'resona eff_rank':30}  {res_mx['eff_rank']:>14.3f}  {res_pc['eff_rank']:>12.3f}")
     print(f"  {'s0_maxwell / s0_poincare':30}  {sv_ratio:>14.4f}  {'(should ~ 4/3)':>12}")
 
+    # resona carries the ratio at the TRACE level too: Tr(M^T M) = s0^2 + s1^2
+    # is dominated by s0^2, so sqrt(Tr_mx/Tr_pc) ~ 4/3.  The moments come from
+    # the same seeded probes, so the stochastic factors largely cancel.
+    tr_ratio       = np.sqrt(res_mx['tr'] / res_pc['tr'])
+    tr_ratio_exact = np.sqrt(np.sum(res_mx['s']**2) / np.sum(res_pc['s']**2))
+
     print(f"\n  SPECTRAL ENCODING OF THE 4/3 ANOMALY:")
     print(f"    s0(Maxwell) / s0(Poincare) = {sv_ratio:.4f}")
     print(f"    4/3 exact                  = {4.0/3.0:.4f}")
     print(f"    Error                      = {abs(sv_ratio - 4.0/3.0):.4f}  "
           f"(nonzero: ratio varies with v)")
+    print(f"    resona moment read sqrt(Tr_Mx/Tr_Pc) = {tr_ratio:.4f}  "
+          f"(exact trace ratio: {tr_ratio_exact:.4f})")
+    print(f"    -> the 4/3 is visible already in the FIRST trace moment, the")
+    print(f"       cheapest stochastic read resona has")
 
     print(f"\n  At v -> 0 (first sample v={v_vals[0]:.2f}):")
     dpdv_mx0 = dp_dv(v_vals[0], k_maxwell)

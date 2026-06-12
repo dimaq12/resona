@@ -57,6 +57,19 @@ analytic geometry of the resolvent's singularities.
 - The Extraction Law is a **research hypothesis** — exponents partly verified, the
   full catastrophe-stratification is open ([`FRONTIER.md`](../FRONTIER.md)).
 
+## Two more dials
+
+```python
+resona.cost.level_spacing_ratio(eigenvalues)   # ⟨r⟩: 0.386 Poisson → a lift EXISTS
+                                               #      0.531 GOE     → chaos, no lift
+resona.of(mv, N).condition()                   # κ = λmax/λmin (PSD), matrix-free
+```
+
+`level_spacing_ratio` is the 3-line integrability detector — unfolding-free,
+O(N log N).  **Resolve symmetry sectors first**: levels from different sectors
+don't repel, and an unprojected chaotic H fakes Poisson (shown live in
+[`examples/quantum/integrability_detector.py`](../examples/quantum/integrability_detector.py)).
+
 ## Worked examples
 
 - **The Φ₁ dial, dequantization, the Shor wall** — [`examples/quantum/dequantize.py`](../examples/quantum/dequantize.py), [`examples/quantum/shor_wall.py`](../examples/quantum/shor_wall.py)

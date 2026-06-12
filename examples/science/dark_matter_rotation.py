@@ -14,9 +14,11 @@ The gap is the "missing mass problem".  Three standard models compete:
 resona's ROLE.  The W-kernel pseudo-inverse is a regularised linear inverse problem:
   W · ρ_DM = Δv²    (W_ij = 4π r_j² Δr / r_i, the "mass-to-rotation" kernel)
 We pass the MOND-fit residual as a linear operator matvec and let resona.of(...)
-inspect its spectral response — the condition number (ratio of extreme eigenvalues)
-tells us how ill-posed the inversion is.  The a₀ recovery uses a gradient descent
-on the MOND interpolation equation, which is a 1-D fixed-point problem.
+inspect its spectral response — s.condition() (the hub's λmax/λmin read) tells us
+how ill-posed the inversion is.  The inversion itself is also run as a resona
+matrix function: resona.apply with f(λ)=1/λ on the regularised normal operator
+reproduces the dense Tikhonov solve, matrix-free.  The a₀ recovery uses a
+gradient descent on the MOND interpolation equation, a 1-D fixed-point problem.
 
 HONESTY CAVEAT.  This is a CURVE-FIT DEMONSTRATION, not a cosmology proof.  The
 data (van Albada et al. 1985) are embedded inline; the models have one free parameter
@@ -112,7 +114,9 @@ for i in range(N):
 delta_v2 = np.maximum(V_OBS**2 - V_DISK**2, 0.0)   # residual centripetal (km²/s²)
 alpha = 0.1  # Tikhonov regularisation
 WtW  = W_dm.T @ W_dm + alpha * np.eye(N)
-rho_dm = np.maximum(np.linalg.solve(WtW, W_dm.T @ delta_v2), 0.0)
+rhs    = W_dm.T @ delta_v2
+x_ls   = np.linalg.solve(WtW, rhs)                 # dense solve = ground truth
+rho_dm = np.maximum(x_ls, 0.0)
 
 # Reconstruct DM rotation curve from recovered density
 v_dm2 = W_dm @ rho_dm
@@ -127,9 +131,15 @@ def WtW_matvec(x):
 
 s = resona.of(WtW_matvec, N, k=24, probes=6)
 lam_lo, lam_hi = s.extreme()
-lam_lo_pos = max(lam_lo, 1e-12)
-spectral_condition = np.sqrt(lam_hi / lam_lo_pos)   # condition of W itself
+spectral_condition = np.sqrt(s.condition())         # κ(W) = √κ(WᵀW), hub read
 eff_rank = s.effective_rank()
+
+# resona.apply: the SAME Tikhonov inversion, matrix-free.  f(λ)=1/λ applied to
+# the regularised normal operator (WᵀW + αI) reproduces the dense solve — the
+# inverse problem is one matrix-function call, no factorisation formed.
+x_resona = resona.apply(lambda x: WtW_matvec(x) + alpha * x,
+                        lambda lam: 1.0 / lam, rhs, k=N)
+solve_rel_err = float(np.linalg.norm(x_resona - x_ls) / np.linalg.norm(x_ls))
 
 # ── 6.  Report ───────────────────────────────────────────────────────────────
 print("=" * 72)
@@ -150,8 +160,10 @@ print(f"  Ratio (recovered/Milgrom) = {a0_SI/MILGROM_A0:.2f}  (1.00 = perfect)\n
 
 print(f"  W^T·W spectral probe (resona.of, matrix-free):")
 print(f"    λ_min(W^T·W) = {lam_lo:.3f},  λ_max(W^T·W) = {lam_hi:.3f}")
-print(f"    cond(W) ≈ sqrt(λ_max/λ_min) = {spectral_condition:.1f}")
-print(f"    effective_rank   = {eff_rank:.1f} / {N}  (low → few modes dominate inversion)\n")
+print(f"    cond(W) = sqrt(s.condition()) = {spectral_condition:.1f}")
+print(f"    effective_rank   = {eff_rank:.1f} / {N}  (low → few modes dominate inversion)")
+print(f"    matrix-free Tikhonov solve (resona.apply, f=1/λ): rel. deviation from")
+print(f"    the dense solve = {solve_rel_err:.1e}  (same ρ_DM, no factorisation)\n")
 
 print("=" * 72)
 print("  HONESTY NOTE: This is a curve-fit demonstration, not a cosmology proof.")

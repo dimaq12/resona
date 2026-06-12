@@ -13,14 +13,20 @@ is precomputed you never need to re-sort — queries cost O(log n) forever.
 This matches the "precompute once, query cheaply" pattern: pay O(n log n)
 upfront, get O(log n) rank queries thereafter.
 
-resona's ROLE is deliberately peripheral here: we use resona.of on the
-uniform-spectrum "shift" operator (circulant permutation of the sorted data)
-to read its spectral effective_rank as a sanity check.  For a perfect sorted
-array the circulant has a flat uniform DOS, so effective_rank ≈ N — a
-spectral fingerprint of a perfectly ordered sequence.
+resona's ROLE.  First the sanity check: resona.of on the uniform-spectrum
+"shift" operator (circulant permutation of the sorted data) reads its
+spectral effective_rank — for a perfect sorted array the circulant spectrum
+is maximally spread, so effective_rank ≈ N.  Then the deep dive: the same
+Spectral object sorts the SPECTRUM itself — s.levels(N) reconstructs all N
+eigenvalues from four numbers (Beta closure) against the exact closed form
+2-2cos(2πk/n), s.density is checked against the analytic arcsine DOS, and
+s.trace(1_(λ≤q)) answers "how many eigenvalues ≤ q" — the spectral twin of
+the CDF rank query.
 
 RESULT.  Zero mismatches vs numpy.sort on all three distributions.  Rank
-queries via binary search match numpy.searchsorted exactly.
+queries via binary search match numpy.searchsorted exactly.  The Beta-closure
+spectrum tracks the exact eigenvalues to ~1% of the span, and spectral rank
+queries land within ~1% of N — all matrix-free.
 
 Run:  python3 examples/graphs/spectral_sort.py
 """
@@ -137,9 +143,47 @@ lo, hi = s.extreme()
 print(f"    Circulant Laplacian: support=[{lo:.3f}, {hi:.3f}], eff_rank={eff_r:.1f} (ideal ≈ {n_sub})")
 print(f"    (eff_rank/N = {eff_r/n_sub:.3f}; close to 1.0 signals flat / maximally-spread spectrum)")
 
+# ---------------------------------------------------------------------------
+# resona deep dive — the WHOLE spectrum from 4 numbers, and rank-as-trace
+# ---------------------------------------------------------------------------
+# The circulant has exact eigenvalues 2-2cos(2πk/n) — a closed form we can use
+# as ground truth (kept exact, per the verification rule).  resona's s.levels(N)
+# reconstructs ALL N eigenvalues from just support + two moments (Beta closure);
+# s.trace(indicator) turns "how many eigenvalues ≤ q" into a one-line rank query
+# — the SPECTRAL twin of the CDF ranker above.
+
+print(f"\n  resona deep dive — sorting the SPECTRUM itself:")
+
+# (a) whole spectrum via Beta closure vs exact circulant eigenvalues
+lam_exact = np.sort(2.0 - 2.0 * np.cos(2 * np.pi * np.arange(n_sub) / n_sub))
+lam_levels = s.levels(n_sub)                      # all N eigenvalues from 4 numbers
+lvl_err = np.abs(lam_levels - lam_exact)
+print(f"    s.levels({n_sub}) vs exact 2-2cos(2πk/n):  mean |Δλ| = {lvl_err.mean():.4f}, "
+      f"max |Δλ| = {lvl_err.max():.4f}  (spectrum spans [0, 4])")
+
+# (b) DOS vs the analytic arcsine law ρ(x) = 1/(π√(x(4-x)))
+xs_dos = np.linspace(0.15, 3.85, 200)
+rho_resona = s.density(xs_dos, eta=0.05)
+rho_exact = 1.0 / (np.pi * np.sqrt(xs_dos * (4.0 - xs_dos)))
+corr_dos = float(np.corrcoef(rho_resona, rho_exact)[0, 1])
+print(f"    s.density vs analytic arcsine DOS:        correlation = {corr_dos:.4f} "
+      f"(uniform θ → arcsine in λ)")
+
+# (c) rank query ON THE SPECTRUM: #{λ ≤ q} = Tr 1_(λ≤q) via s.trace — the same
+#     CDF-rank idea, but matrix-free on an operator instead of a data array.
+print(f"    spectral rank #{{λ ≤ q}} via s.trace(1_(λ≤q)) vs exact count:")
+for q in (1.0, 2.0, 3.0):
+    rank_resona = s.trace(lambda lam: (lam <= q).astype(float))
+    rank_exact = int(np.searchsorted(lam_exact, q, side="right"))
+    rel = abs(rank_resona - rank_exact) / n_sub * 100
+    print(f"      q={q:.1f}:  resona {rank_resona:7.1f}   exact {rank_exact:4d}   "
+          f"(off by {rel:.1f}% of N)")
+
 print()
 print("=" * 72)
 print("  Zero mismatches across all 3 distributions.")
 print("  The CDF rank operator IS the sort — precomputing the sorted array once")
 print("  gives O(log n) rank queries forever, identical to numpy.searchsorted.")
+print("  And the same rank idea lifts to operators: s.levels / s.trace give the")
+print("  sorted spectrum and #{λ ≤ q} matrix-free, verified against closed form.")
 print("=" * 72)

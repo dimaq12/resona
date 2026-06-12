@@ -21,6 +21,13 @@ stochastic Lanczos quadrature probes the spectral density.  The effective_rank()
 confirms that the solar system is genuinely low-dimensional (8 planets = 8 atoms
 in the spectral measure).  The W-kernel (dlambda/dparam = v^T dA/dparam v,
 Hellmann-Feynman) quantifies how each eigenfrequency reacts to a change in GM.
+Three more library reads close the loop:
+  - s.condition(): the PSD condition number = (omega_Mercury/omega_Neptune)^2,
+    the dynamic range of the solar system's clock, off the same Spectral hub;
+  - resona.apply(matvec, sqrt, 1): sqrt(A)*1 returns the frequency vector
+    itself — a matrix function evaluated matrix-free;
+  - wkernel.design: the INVERSE step — given a target eigenvalue shift, solve
+    W*dk = dlambda for the GM change that produces it (round-trip verified).
 
 HONESTY CAVEAT.  This is a real spectral relation (Kepler's law is exact in the
 two-body problem) but the "operator" is diagonal by construction — it does not
@@ -90,6 +97,24 @@ _dA_dGM     = A_AU**(-3)           # diagonal of dA/d(GM)
 _W_mat = wk.wkernel(_eigvecs_id, [np.diag(_dA_dGM)])  # shape (N, 1)
 W_GM = _W_mat[:, 0]               # sensitivity of each eigenvalue to GM
 
+# ── s.condition(): dynamic range of the solar-system clock ───────────────────
+# PSD operator → condition number κ = λ_max/λ_min = (ω_Mercury/ω_Neptune)².
+kappa       = s.condition()
+kappa_exact = float(omega2.max() / omega2.min())
+kappa_err   = abs(kappa - kappa_exact) / kappa_exact
+
+# ── resona.apply: √A·1 IS the frequency vector (matrix function, matrix-free) ─
+omega_rec = resona.apply(matvec, np.sqrt, np.ones(N), k=N)
+omega_err = float(np.max(np.abs(omega_rec - OMEGA)))
+
+# ── wkernel.design: the INVERSE problem — what ΔGM produces a given shift? ───
+# Plant ΔGM = 10% of GM, predict the eigenvalue shift Δλ = W·ΔGM, then hand
+# wk.design only (W, Δλ) and ask it to recover the parameter step.
+dGM_true   = 0.1 * GM
+dlam       = _W_mat @ np.array([dGM_true])      # forward: Hellmann-Feynman shift
+dGM_rec    = float(wk.design(_W_mat, dlam)[0])  # inverse: one design step
+design_err = abs(dGM_rec - dGM_true)
+
 if __name__ == "__main__":
     print("=" * 68)
     print("  KEPLER SPECTRUM — solar system as spectral operator")
@@ -122,6 +147,18 @@ if __name__ == "__main__":
     print(f"    Most sensitive to GM: {NAMES[np.argmax(W_GM)]} (W={W_GM.max():.3f})")
     print(f"    Least sensitive:      {NAMES[np.argmin(W_GM)]} (W={W_GM.min():.5f})")
     print(f"    Ratio inner/outer:    {W_GM.max()/W_GM.min():.1f}x")
+
+    print(f"\n  W-KERNEL DESIGN (wk.design, inverse step):")
+    print(f"    Planted ΔGM = {dGM_true:.6f} AU^3/yr^2 (a 10% heavier Sun)")
+    print(f"    Recovered from (W, Δλ) alone: ΔGM = {dGM_rec:.6f}"
+          f"  (|error| = {design_err:.2e})")
+    print(f"    -> the spectral Jacobian inverts: spectrum shift => parameter change")
+
+    print(f"\n  SPECTRAL CONDITION & MATRIX FUNCTION (same hub object):")
+    print(f"    s.condition()  = {kappa:.1f}  (exact ω²_Mercury/ω²_Neptune ="
+          f" {kappa_exact:.1f}, rel err {kappa_err:.1e})")
+    print(f"    resona.apply(√A)·1 returns (ω_1..ω_8): max |ω_rec − ω| ="
+          f" {omega_err:.2e}")
 
     print(f"\n  METRICS SUMMARY:")
     print(f"    Power-law exponent recovered: {alpha:.5f}  (exact -3/2 = -1.5)")

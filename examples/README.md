@@ -34,6 +34,7 @@ python3 examples/<dir>/<name>.py
 | `hubbard_mott.py` | Hubbard Mott crossover via trace moments, no sign problem | DOS depletes 0.114→0.024 (79%) |
 | `syk_chaos.py` | SYK free vs maximally-chaotic via self-averaging | CV gap +20% (correct direction) |
 | `heisenberg_thermo.py` | full thermodynamics Z,F,E,S,Cv from the spectrum | E err 0.6% @ L=10; L=20 = 9 TB for eigh |
+| 🎯 `integrability_detector.py` | is it integrable? ⟨r⟩ + blind conserved-charge search | ⟨r⟩ 0.392/0.532 (refs .386/.531); 4 vs 1 charges |
 
 ## graphs/
 | file | what | metric |
@@ -53,7 +54,8 @@ python3 examples/<dir>/<name>.py
 ## spectral_phenomena/
 | file | what | metric |
 |------|------|--------|
-| 🎯 `defect_sort.py` | the defect IS the sorting operator | **0 mismatches** vs np.sort |
+| 🎯 `defect_sort.py` | the defect IS the sorting operator (+ its pseudospectrum) | **0 mismatches** vs np.sort; bloom ε^{1/q} exact |
+| 🎯 `nonnormal_convergence.py` | GMRES follows the PSEUDOspectrum, not the spectrum | same spectrum: 14 iters vs stall; σ_min 1e-9 |
 | 🎯 `universal_solver.py` | precompute the response field → instant solves (harvest) | 10,000 solves, **2.6e-15** residual |
 | `arithmetic_manifold.py` | 12 bit-ops self-cluster by spectral fingerprint | silhouette 0.40 (partial, honest) |
 | 🎯 `affine_flow.py` | exact exp(dt·J) flow for stiff/non-normal ODEs (`apply`) | accuracy 38–141× BE (timing caveat) |

@@ -8,8 +8,13 @@ effective rank, and functionals MATRIX-FREE, at scale.
 
 Demo: a noisy 3-tone signal (audio/radio-like) → trajectory covariance operator →
 resona recovers the dominant components above the noise floor, never forming the
-covariance.  (Same recipe: image = patch covariance; radio array = channel
-covariance → number of emitters / DOA, MUSIC-style.)
+covariance.  The hub then deepens the read: s.condition() (dynamic range),
+s.levels() (Beta-closure spectrum vs dense eigh, honest about spiked bulks),
+resona.solve.rayleigh_polish (λ₁ to machine precision, matrix-free), and
+resona.cost.lift_rank / is_extractable certify the raw signal itself is
+low-rank extractable.  (Same recipe: image = patch covariance — see
+image_anomaly.py, the sister example; radio array = channel covariance →
+number of emitters / DOA, MUSIC-style.)
 
 Run:  python3 examples/signals.py
 """
@@ -17,6 +22,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 from scipy import linalg
+import resona
 from resona import Spectral
 
 rng = np.random.default_rng(0)
@@ -53,6 +59,28 @@ def main():
     print(f"  effective rank Φ₁ = {s.effective_rank():.1f}  (≪ W={W}: signal is low-rank)")
     print(f"  top eigenvalue  resona = {top_ritz[0]:.1f}   true = {ev[0]:.1f}   "
           f"err = {abs(top_ritz[0]-ev[0])/ev[0]:.1%}")
+
+    # hub readouts — same Spectral objects, no extra dense work
+    kappa = s.condition()                                  # dynamic range of C
+    lam1 = resona.solve.rayleigh_polish(matvec, sigma=float(top_ritz[0]), N=W)
+    rel1 = abs(lam1 - ev[0]) / ev[0]
+    lam_beta = s.levels(W)                                 # Beta closure: W eigenvalues from 4 numbers
+    edge_err = abs(lam_beta[-1] - ev[0]) / ev[0]
+    print(f"\n  hub readouts on the same operator:")
+    print(f"  condition κ = λ_max/λ_min = {kappa:.2e}   (s.condition: dynamic range of C)")
+    print(f"  λ₁ via rayleigh_polish (matrix-free) = {lam1:.3f}")
+    print(f"     vs dense eigh {ev[0]:.3f}   rel err = {rel1:.1e}  (machine precision)")
+    print(f"  s.levels({W}) Beta closure: top edge within {edge_err:.1%} of dense λ₁ —")
+    print(f"     but this spectrum is SPIKED (6 outliers over a noise bulk), exactly")
+    print(f"     where a smooth closure must blur; for spikes, read s.nodes (table above).")
+
+    # lift diagnostics from resona.cost — is the raw SIGNAL low-rank extractable?
+    lift_r = resona.cost.lift_rank(x, k=W)
+    extractable, ranks = resona.cost.is_extractable(x)
+    print(f"  cost.lift_rank(x, k={W}) = {lift_r:.1f}  (Hankel chart size ≈ 2×3 tones)")
+    print(f"  cost.is_extractable(x) → {extractable}  "
+          f"(rank saturates across windows: {', '.join(f'{r:.1f}' for r in ranks)})")
+
     print("\n  → C is W×W and never formed; the same recipe reads PHOTO patch-")
     print("    covariance (PCA/denoise), AUDIO/RADIO trajectory (periods, sources),")
     print("    and array covariance (number of emitters / DOA) — all matrix-free.")

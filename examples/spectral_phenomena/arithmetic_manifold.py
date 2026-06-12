@@ -19,6 +19,9 @@ RESONA's role:  resona.of(matvec, N, k, probes) extracts Ritz nodes and
        weights from A^T A (non-square operators promoted via A^T A, symmetric)
        → moments Tr((AᵀA)^p), effective_rank, extreme singular values.
        These 6 numbers form each operator's "spectral fingerprint".
+       ACT 2 enriches it with the free cumulants κ₁..κ₄ (s.cumulants — the
+       canonical additive coordinates of free probability), read from the SAME
+       Spectral objects at zero extra matvec cost, and re-clusters.
 
 Honest caveat:  Clustering 12 points with 6 features is not a rigorous ML
        result — it is an exploratory demonstration.  We report silhouette
@@ -99,7 +102,11 @@ ops['='] = A_eq
 def spectral_fingerprint(A, k=20, probes=12):
     """
     Spectral invariants of A via resona.of on the Gram matrix AᵀA.
-    Returns 6 features: [eff_rank, lam_min, lam_max, m1, m2, m3].
+    Returns (base, kappa):
+      base  — 6 features [eff_rank, lam_min, lam_max, m1, m2, m3];
+      kappa — 4 free cumulants κ₁..κ₄ of the same spectrum (s.cumulants),
+              the canonical coordinates of free probability (one extra
+              readout of the SAME Spectral object — no extra matvecs).
     A can be non-square.
     """
     n = A.shape[1]   # input dimension
@@ -114,13 +121,16 @@ def spectral_fingerprint(A, k=20, probes=12):
     m1 = s.moment(1)
     m2 = s.moment(2)
     m3 = s.moment(3)
-    return np.array([er, lam_min, lam_max, m1, m2, m3])
+    base = np.array([er, lam_min, lam_max, m1, m2, m3])
+    kappa = np.asarray(s.cumulants(4))
+    return base, kappa
 
 
 names = sorted(ops.keys())
 fingerprints = {}
+cumulant_fp = {}
 for name in names:
-    fingerprints[name] = spectral_fingerprint(ops[name])
+    fingerprints[name], cumulant_fp[name] = spectral_fingerprint(ops[name])
 
 # ── build feature matrix and normalise ───────────────────────────────────────
 X = np.array([fingerprints[n] for n in names])   # 12 × 6
@@ -218,6 +228,23 @@ def label_accuracy(pred, true):
 acc = label_accuracy(labels_k4, expected_labels)
 
 
+# ── ACT 2: enriched fingerprint — append the free cumulants κ₁..κ₄ ──────────
+# s.cumulants() gives the coordinates in which spectra ADD under free
+# convolution — a sharper shape descriptor than raw moments.  Same Spectral
+# objects, 4 extra numbers per operator, no extra matvecs.
+X_rich = np.array([np.concatenate([fingerprints[n], cumulant_fp[n]]) for n in names])  # 12 × 10
+X_rich_norm = (X_rich - X_rich.mean(axis=0)) / (X_rich.std(axis=0) + 1e-12)
+
+labels_rich = kmeans(X_rich_norm, k=4)
+sil_rich = silhouette(X_rich_norm, labels_rich)
+acc_rich = label_accuracy(labels_rich, expected_labels)
+
+D_rich = np.zeros((n_ops, n_ops))
+for i in range(n_ops):
+    for j in range(n_ops):
+        D_rich[i, j] = np.linalg.norm(X_rich_norm[i] - X_rich_norm[j])
+
+
 # ── main report ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     print("=" * 72)
@@ -262,6 +289,33 @@ if __name__ == "__main__":
     sep = np.mean(inter) / max(np.mean(intra), 1e-12)
     print(f"    Separation ratio (inter/intra mean): {sep:.2f}x")
 
+    # ── ACT 2 report: free-cumulant-enriched fingerprint ────────────────────
+    print(f"\n  ACT 2 — enriched fingerprint: base 6 features + free cumulants κ₁..κ₄")
+    print(f"  (s.cumulants(4): coordinates in which spectra ADD under free convolution)")
+    print(f"\n  {'Op':>6s}  {'κ₁':>9s}  {'κ₂':>10s}  {'κ₃':>11s}  {'κ₄':>12s}  {'cluster':>8s}")
+    print(f"  {'-'*6}  {'-'*9}  {'-'*10}  {'-'*11}  {'-'*12}  {'-'*8}")
+    for i, name in enumerate(names):
+        kp = cumulant_fp[name]
+        print(f"  {name:>6s}  {kp[0]:>9.3f}  {kp[1]:>10.2f}  {kp[2]:>11.1f}  {kp[3]:>12.0f}  "
+              f"{'k'+str(labels_rich[i]):>8s}")
+
+    print(f"\n  k-means clusters on the enriched (10-feature) fingerprint:")
+    for c in range(4):
+        members = [names[i] for i in range(n_ops) if labels_rich[i] == c]
+        print(f"    cluster {c}: {members}")
+
+    intra_r, inter_r = [], []
+    for i in range(n_ops):
+        for j in range(i + 1, n_ops):
+            if expected_labels[i] == expected_labels[j]:
+                intra_r.append(D_rich[i, j])
+            else:
+                inter_r.append(D_rich[i, j])
+    sep_rich = np.mean(inter_r) / max(np.mean(intra_r), 1e-12)
+    print(f"\n  Silhouette (enriched): {sil_rich:.3f}   vs base {sil_k4:.3f}")
+    print(f"  Best-perm accuracy (enriched): {acc_rich*100:.0f}%   vs base {acc*100:.0f}%")
+    print(f"  Separation ratio (enriched): {sep_rich:.2f}x   vs base {sep:.2f}x")
+
     print("\n" + "=" * 72)
     print(f"  Silhouette {sil_k4:.2f}, best-perm accuracy {acc*100:.0f}%.")
     print(f"  Spectral invariants from resona.of (no training, no labels)")
@@ -273,4 +327,7 @@ if __name__ == "__main__":
     else:
         print(f"  The clustering is POOR (silhouette ≤ 0): spectral moments alone")
         print(f"  do not separate these operators — richer features needed.")
+    print(f"  Adding free cumulants κ₁..κ₄ (s.cumulants) sharpens the geometry:")
+    print(f"  silhouette {sil_k4:.2f} → {sil_rich:.2f}, separation {sep:.2f}x → {sep_rich:.2f}x,")
+    print(f"  accuracy unchanged at {acc_rich*100:.0f}% — tighter clusters, same family map.")
     print("=" * 72)

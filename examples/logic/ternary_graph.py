@@ -8,8 +8,12 @@ WHAT.  Build a graph whose edges carry TERNARY weights from {0, 1, 2}:
 
 We build a ternary Laplacian L_T — weak edges get real weight 0.5, strong edges
 get real weight 2.0 (4x contrast) — then pass it to resona.of which reads the
-spectral fingerprint WITHOUT calling eig: effective rank, spectral moments, and
-the spectral density curve.
+spectral fingerprint WITHOUT calling eig: effective rank, spectral moments, the
+spectral density curve, the free cumulants κ₁..κ₄ (s.cumulants — they obey the
+exact scaling law κ_n → cⁿκ_n under weight contrast c), the condition number
+(s.condition — valid because the +0.01 shift makes L_T PD), and the Beta-closure
+spectrum (s.levels), whose residual against dense eig doubles as a block-
+structure detector.
 
 Three graph families are compared:
   A. PURE RANDOM WEAK:    all edges label=1, Erdos-Renyi-style
@@ -135,7 +139,11 @@ def spectral_fingerprint(L):
     xs       = np.linspace(0.01, mean_lam + 4 * spread + 0.1, 300)
     rho      = sp.density(xs)
     peak     = float(xs[np.argmax(rho)])
-    return dict(n=n, r_eff=r_eff, mu1=mean_lam, spread=spread, peak=peak)
+    # Deeper hub readouts from the SAME Spectral object (no extra matvecs):
+    kappa    = tuple(sp.cumulants(4))   # free cumulants — additive coordinates
+    cond     = sp.condition()           # κ = λ_max/λ_min (valid: L is PD, +0.01 shift)
+    return dict(n=n, r_eff=r_eff, mu1=mean_lam, spread=spread, peak=peak,
+                kappa=kappa, cond=cond), sp
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +196,7 @@ if __name__ == "__main__":
     ]
 
     results = []
+    spectra = []   # (Spectral, Laplacian) per config — for the deeper hub readouts
     for label, s_frac in configs:
         n, edges = clustered_ternary_graph(K, M, inter_prob=0.05,
                                            strong_fraction=s_frac, seed=42)
@@ -196,11 +205,12 @@ if __name__ == "__main__":
         L = build_ternary_laplacian(n, edges)
 
         t0 = time.perf_counter()
-        fp = spectral_fingerprint(L)
+        fp, sp = spectral_fingerprint(L)
         t_spec = time.perf_counter() - t0
 
         ep = edge_product_spectrum(edges)
         results.append((label, n_weak, n_strong, fp, t_spec, ep))
+        spectra.append((sp, L))
 
     # Print results table
     print(f"  {'Graph':24s}  {'E':>4}  {'w':>4}  {'s':>4}  "
@@ -241,6 +251,34 @@ if __name__ == "__main__":
     print()
     print(f"  Mean eigenvalue ratio (strong/weak): "
           f"{results[1][3]['mu1']/results[0][3]['mu1']:.2f}x  (= weight ratio 2.0/0.5 = 4x, as expected)")
+
+    # ── Deeper hub readouts (same Spectral objects, no extra matvecs) ────────
+    print()
+    print(f"  Free-cumulant fingerprint κ₁..κ₄ (s.cumulants — the coordinates that")
+    print(f"  ADD under free convolution; weight scaling w → c·w sends κ_n → cⁿ·κ_n):")
+    for lbl, _, _, fp, _, _ in results:
+        k1, k2, k3, k4 = fp['kappa']
+        print(f"    {lbl:24s}  κ₁={k1:7.3f}  κ₂={k2:8.2f}  κ₃={k3:9.1f}  κ₄={k4:11.1f}")
+    kw, ks = results[0][3]['kappa'], results[1][3]['kappa']
+    print(f"    scaling check (strong/weak): κ₁ ratio = {ks[0]/kw[0]:.2f} (≈ 4¹)   "
+          f"κ₂ ratio = {ks[1]/kw[1]:.2f} (≈ 4² = 16)")
+    print()
+    print(f"  PD health-check via s.condition() (valid: the +0.01 shift makes L PD;")
+    print(f"  κ here reads λ_max in units of the regularised zero mode):")
+    for (lbl, _, _, fp, _, _) in results:
+        print(f"    {lbl:24s}  κ = {fp['cond']:10.1f}")
+    print()
+    sp_mix, L_mix = spectra[2]
+    lam_dense = np.sort(np.linalg.eigvalsh(L_mix.toarray()))
+    lam_beta = sp_mix.levels(len(lam_dense))
+    lvl_err = np.abs(lam_beta - lam_dense)
+    rel = lvl_err.mean() / max(lam_dense.std(), 1e-12)
+    print(f"  Beta-closure spectrum (mixed graph): s.levels({len(lam_dense)}) vs dense eigvalsh")
+    print(f"    mean |Δλ| = {lvl_err.mean():.3f}  ({rel*100:.1f}% of the spectral spread)")
+    print(f"    The Beta closure assumes a SMOOTH spectrum; its residual here is a")
+    print(f"    structure detector — the SBM's clique band deviates from the smooth")
+    print(f"    maximum-entropy shape exactly where the 8 block modes sit.")
+
     print()
     print(f"  GF(3) edge label product distribution:")
     for lbl, nw, ns, _, _, ep in results:
@@ -250,6 +288,8 @@ if __name__ == "__main__":
     print()
     print(f"  RESONA: spectral fingerprint computed MATRIX-FREE via resona.of")
     print(f"  (Stochastic Lanczos Quadrature on L_T matvec, no eig called, n={n_nodes}).")
+    print(f"  (One dense eigvalsh appears above ONLY as ground truth for the")
+    print(f"   s.levels Beta-closure check — the fingerprint itself never calls eig.)")
     print(f"  r_eff = exp(H[spectral density]) measures the 'dimension' of the graph's")
     print(f"  logical space: how many independent modes the ternary-weighted Laplacian spans.")
     print()

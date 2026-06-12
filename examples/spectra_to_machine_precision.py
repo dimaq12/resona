@@ -71,17 +71,8 @@ def tridiag(k):
     return A
 
 
-def rayleigh_polish(A, sigma, iters=4):
-    """Shifted inverse iteration + Rayleigh quotient — cubic → machine precision."""
-    v = rng.standard_normal(N); v /= norm(v); lam = sigma
-    I = np.eye(N)
-    for _ in range(iters):
-        try:
-            v = solve(A - lam * I, v)
-        except np.linalg.LinAlgError:
-            break
-        v /= norm(v); lam = float(v @ (A @ v))
-    return lam
+# the polish step is a library primitive now: resona.solve.rayleigh_polish
+# (shifted inverse iteration + Rayleigh quotient — cubic → machine precision)
 
 
 if __name__ == "__main__":
@@ -103,7 +94,7 @@ if __name__ == "__main__":
             t = ev[idx]
             seed = ritz[np.argmin(np.abs(ritz - t))]        # resona Ritz seed (shift)
             seed_errs.append(abs(seed - t) / abs(t))
-            lam = rayleigh_polish(A, seed, iters=6)         # converges to a true eigenvalue
+            lam = resona.solve.rayleigh_polish(A, seed, iters=6)   # → a true eigenvalue
             final_errs.append(np.min(np.abs(ev - lam)) / abs(lam))   # dist to nearest true λ
     seed_errs, final_errs = np.array(seed_errs), np.array(final_errs)
     mz = int(np.sum(final_errs < 1e-13))
@@ -111,6 +102,21 @@ if __name__ == "__main__":
     print(f"  + Rayleigh polish:      median rel.err = {np.median(final_errs):.2e}")
     print(f"  machine zero (<1e-13):  {mz}/{len(final_errs)} eigenvalues "
           f"({mz/len(final_errs)*100:.0f}%)")
+
+    # ── ACT 2: a CLUSTERED spectrum — where double precision silently lies ────
+    # Near an order-q cluster float64 keeps only ~16/q digits (the catastrophe
+    # law).  resona.solve.catastrophe_solve detects q from the cheap solve and
+    # spends EXACTLY the budget the catastrophe predicts (dps = q × target).
+    from fractions import Fraction as Fr
+    a = Fr(1, 10 ** 5)
+    truth = [1 - a, 1, 1 + a, 5, -3]                    # q=3 cluster at sep 1e-5, EXACT
+    roots, q, dps, naive = resona.solve.catastrophe_solve(resona.solve.exact_poly(truth))
+    dig = lambda rs: -np.log10(max(min(abs(complex(t) - r) for r in rs) for t in truth) + 1e-17)
+    print(f"\n  clustered case (q=3 eigenvalues within 1e-5, exact coefficients):")
+    print(f"    naive float64 roots:     {dig(naive):>5.1f} correct digits  (≈16/q, silent loss)")
+    print(f"    catastrophe_solve:       {dig(roots):>5.1f} correct digits  "
+          f"(q={q} detected → {dps} dps spent)")
+
     print("\n" + "=" * 70)
     print("  resona's matrix-free Ritz values seed the spectrum; a few Rayleigh-quotient")
     print("  iterations (cubic) polish to machine precision — the sft35 pipeline, on the")

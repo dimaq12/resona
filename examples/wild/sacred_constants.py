@@ -20,6 +20,14 @@ The W-kernel idea from the FA program: we sort the constants and look at
 spectral gaps — places where the "spectrum" has a large jump, potentially
 flagging which decades of scale are well-sampled and which are empty.
 
+Three more resona reads carry the analysis further:
+  - s.levels(N): the Beta max-entropy closure reconstructs ALL N log-eigenvalues
+    from just four numbers (support + two moments) — we check it against the
+    true sorted log-values.
+  - resona.local_spectrum(matvec, v): the measure seen from an INDICATOR vector
+    over a class of constants (pure math vs physics) — class-resolved spectral
+    statistics, read matrix-free from the same operator.
+
 HONESTY CAVEAT.  This is a WHIMSICAL TOY.  The "spectral structure" reflects
 nothing deep about the constants themselves — just the distribution of their
 numerical values after we arrange them.  The effective_rank, for instance,
@@ -34,7 +42,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 import numpy as np
 import resona
 
-# ── 107 embedded constants ────────────────────────────────────────────────────
+# ── 115 embedded constants ────────────────────────────────────────────────────
 # (name, value)  — all positive (we take abs where needed)
 phi = (1.0 + np.sqrt(5)) / 2.0
 
@@ -213,9 +221,35 @@ from scipy.signal import argrelmax
 peaks, = argrelmax(density, order=3)
 top3_peaks = peaks[np.argsort(density[peaks])[-3:]][::-1]
 
+# ── Beta max-entropy closure: ALL N levels from 4 numbers (s.levels) ──────────
+# resona reads support + two moments matrix-free; the Beta closure unfolds the
+# whole log-spectrum.  Compare against the true sorted log-values.
+levels_beta  = np.sort(s_log.levels(N))
+beta_med_err = float(np.median(np.abs(levels_beta - logv_sorted)))
+beta_max_err = float(np.max(np.abs(levels_beta - logv_sorted)))
+beta_span    = float(logv_sorted.max() - logv_sorted.min())
+
+# ── Class-resolved measures via resona.local_spectrum ─────────────────────────
+# Probe the SAME log-operator from indicator vectors over constant classes:
+# the local spectral measure mu_v gives exactly the class's log-value statistics.
+def class_stats(idx_lo, idx_hi):
+    """Mean +/- spread of log(1+|c|) over CONSTANTS[idx_lo:idx_hi+1], read as
+    the local spectral measure of the indicator vector (one Lanczos run)."""
+    v = np.isin(order, np.arange(idx_lo, idx_hi + 1)).astype(float)
+    nodes_c, w_c = resona.local_spectrum(log_matvec, v, k=64)
+    w_c = w_c / w_c.sum()
+    mean = float(np.sum(w_c * nodes_c))
+    var  = max(float(np.sum(w_c * nodes_c**2)) - mean**2, 0.0)
+    return mean, np.sqrt(var)
+
+i_math_lo, i_math_hi = names.index("pi"), names.index("pi/4")
+i_phys_lo, i_phys_hi = names.index("alpha^-1 (FSC)"), names.index("m_top (GeV)")
+math_mean, math_spread = class_stats(i_math_lo, i_math_hi)
+phys_mean, phys_spread = class_stats(i_phys_lo, i_phys_hi)
+
 # ── Report ────────────────────────────────────────────────────────────────────
 print("=" * 72)
-print("SACRED CONSTANTS OPERATOR — 107 numbers, one spectrum")
+print(f"SACRED CONSTANTS OPERATOR — {N} numbers, one spectrum")
 print("=" * 72)
 print(f"  {N} constants embedded as eigenvalues of a diagonal operator.")
 print(f"  Probed matrix-free by resona.of(matvec, N).\n")
@@ -242,6 +276,21 @@ print(f"\n  LOG-DENSITY PEAKS (where constants cluster on the log scale):")
 for p in top3_peaks:
     exp_val = np.exp(log_range[p]) - 1.0
     print(f"    log(1+c) ≈ {log_range[p]:.2f}  →  c ≈ {exp_val:.3e}")
+
+print(f"\n  BETA CLOSURE (s.levels): all {N} log-eigenvalues from FOUR numbers")
+print(f"  (support endpoints + two trace moments, all read matrix-free):")
+print(f"    median |level error| = {beta_med_err:.2f}   max = {beta_max_err:.2f}"
+      f"   (span = {beta_span:.1f})")
+print(f"    (the heavy Planck-scale tail breaks the smooth-density assumption —")
+print(f"     the misfit itself is the diagnostic: this measure is ATOMIC, not smooth)")
+
+print(f"\n  CLASS-RESOLVED MEASURES (resona.local_spectrum from indicator vectors):")
+print(f"    pure-math constants : log(1+c) = {math_mean:5.2f} ± {math_spread:.2f}"
+      f"   (c ~ {np.exp(math_mean)-1:.1f})")
+print(f"    physics constants   : log(1+c) = {phys_mean:5.2f} ± {phys_spread:.2f}"
+      f"   (c ~ {np.exp(phys_mean)-1:.3e})")
+print(f"    (physics constants live ~{abs(phys_mean-math_mean):.0f} log-units away"
+      f" and are ~{phys_spread/max(math_spread,1e-12):.0f}x more spread — SI units, not mysticism)")
 
 print()
 print("=" * 72)
