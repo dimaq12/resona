@@ -6,6 +6,13 @@ The canonical coordinates of the response algebra are the FREE cumulants κ_n
 the moment↔cumulant map running over NON-CROSSING partitions (the 2κ₂² vs the
 classical 3κ₂² is exactly the free-vs-classical signature).
 
+WHY FREE PROBABILITY IS EVERYWHERE — the free CLT: summing K free copies
+(normalized) kills every cumulant beyond the second, κ_{n>2} → 0, so the
+spectrum flows to the SEMICIRCLE — the free Gaussian, the universal
+attractor.  Every random/disordered/generic system is asymptotically free at
+scale; that is why ⊞ keeps appearing.  (Verified: theory/free_clt.py —
+κ₄ ∝ 1/K measured.)
+
 FREENESS — the exact condition under which the response composes — is the
 vanishing of MIXED cumulants, equivalently of alternating CENTERED moments
 τ(Å B̊ Å B̊ …) with Å = A − τ(A).  Their magnitude is the freeness DEFECT: ≈0
@@ -135,6 +142,9 @@ def rie_clean(eigenvalues, q, eta=None):
     eigenbasis itself; for q → 0 it converges to no-op (E is already good).
     """
     lam = np.asarray(eigenvalues, float)
+    if not (0.0 < q <= 1.1):
+        raise ValueError(f"q = N/T (dimension/observations) must be in (0, 1.1]; "
+                         f"got {q} — check which way your data matrix is oriented")
     if eta is None:
         eta = 1.0 / np.sqrt(len(lam))
     g = _stieltjes_at(lam, lam, eta)

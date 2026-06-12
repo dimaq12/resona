@@ -27,6 +27,11 @@ slopes (measured `time ∝ N^s` on tridiagonal operators, N=64…512) are in **b
 | `defect.sigma_min(matvec,z)` | `O(k·C)` (2N realified Lanczos) | matvec (+rmatvec) | ✓ | dense path: one SVD `O(N³)`, exact |
 | `defect.pseudospectrum_radius` | `O(iters·sigma_min)` | matvec (+rmatvec) | ✓ | log-bisection on the bloom, ~60 σ_min calls |
 | `cost.level_spacing_ratio(λ)` | `O(N log N)` | eigenvalues | — | 3 lines; resolve symmetry sectors first |
+| `defect.generator_read` | `O(N)` (a scaled difference) | two solver runs | ✓ | BE-specific constant; refuses CN (measured O(1) deviation) |
+| `defect.spectroscopy` | `O(Σ\|band\|)` | the defect power in the caller's basis | ✓ | barycentre read; ±1-bin rounding; ~5× the ratio method's matvecs upstream |
+| `wkernel.track` | `O(steps·N³)` (one eigh per midpoint) | dense family (A0, B_j) | ✗ | crossing-safe; ~100× frozen-W accuracy per eigh; 44–302× fewer eigh than FD continuation |
+| `wkernel.kappa_w` | `O(probes·N³)` | dense family | ✗ | frozen-W ACCURACY dial (ρ=0.93); NOT a cost dial (blind ρ≈0.05) |
+| `subordination.contraction` | one `pastur_grid` + one G′ eval | spectrum | ✓* | pure read; critical window narrows with σ² (measured) |
 | `cloud(mv,N,k,p)` | `O(p·k·C + p·k²·N)` (Arnoldi+DGKS) | matvec | ✓ | complex Ritz cloud ⊂ numerical range; reads are transient-growth dials |
 | `lift.koopman(X)` | one thin SVD `O(n·T·min)` | snapshot matrix | — | returns the r×r reduced action; r = reported data rank |
 | `thermal.expect/correlator` | `O(probes·k·C)` / `·len(ts)·2` | matvec | ✓ | typicality error ~1/√D_eff, stderr reported |

@@ -15,6 +15,8 @@ matrix-free — and from which every spectral functional is read.
     s.effective_rank() ; s.condition()             # the honest cost dials (Φ₁, κ)
 
     resona.apply(matvec, f, v)     # APPLY   — f(A)·v: solve, evolve, filter
+    resona.cloud(matvec, N)        # non-Hermitian? the Ritz CLOUD (Spectral is
+                                   # for self-adjoint operators; cloud for general)
     resona.solve.rayleigh_polish   # PRECISION — spend effort only on the defect
 """
 from .spectral import Spectral, apply, quadform, local_spectrum, local_density, from_measure, from_eigenbasis

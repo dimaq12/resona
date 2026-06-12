@@ -771,7 +771,14 @@ class Spectral:
 
     # ── COMPOSE (the free-convolution theorem: hard op → linear, matrix-free) ──
     def __add__(self, other: "Spectral") -> "Spectral":
-        """A + B — never forms A+B, never diagonalizes; uses (A+B)x = Ax + Bx."""
+        """A + B — never forms A+B, never diagonalizes; uses (A+B)x = Ax + Bx.
+
+        What makes this legitimate is the CLOSURE THEOREM of the response
+        algebra: every moment of A+B is a finite combination of joint moments
+        of (A, B) — the algebra of responses is closed under +, verified to
+        machine precision (1.6e-14) in the source program.  The spectrum
+        alone does NOT compose (Horn's problem); the response does.
+        """
         self._require_matvec(other)
         return Spectral.of(lambda x: self.matvec(x) + other.matvec(x), self.N)
 
@@ -813,6 +820,9 @@ class Spectral:
               support=None):
         """Tr f(A) = N · E[f(λ)] = N · Σ w·f(node).
 
+        f may be a CALLABLE (``s.trace(np.log)``) or a family NAME
+        (``s.trace("log")`` — required for certificates, identical otherwise).
+
         ``with_err=True`` → (value, stderr): the standard error of the
         stochastic estimate, read from the scatter of the independent probes
         (free — no extra matvecs).  The honest number, with its honest ±.
@@ -827,6 +837,10 @@ class Spectral:
         see `quadform`.
         """
         f, fam = _resolve_f(f)
+        if certified and with_err:
+            raise ValueError("certified=True brackets the k-truncation; "
+                             "with_err=True reads the Monte-Carlo scatter — "
+                             "two different error sources: ask separately")
         if certified:
             if fam is None:
                 raise ValueError("certified=True needs f as a family name "
@@ -942,6 +956,8 @@ class Spectral:
         """
         if self.matvec is None:
             raise ValueError("zoom needs the carried matvec")
+        if not (a < b):
+            raise ValueError(f"zoom window needs a < b (got a={a}, b={b})")
         lo, hi = self.extreme()
         pad = 0.05 * (hi - lo) + 1e-12
         lo, hi = lo - pad, hi + pad
@@ -1018,13 +1034,30 @@ class Spectral:
                 lo = min(lo, lo_p)
         return float(hi / lo) if lo > 0 else float("inf")
 
-    def effective_rank(self) -> float:
+    def effective_rank(self, with_err: bool = False):
         """Φ₁ = Tr(A)² / Tr(A²) — participation ratio / effective number of modes,
         for POSITIVE-SEMIDEFINITE operators (covariance, kernel, Hessian).  Low Φ₁
         ⇒ structured/cheap; high ⇒ near the genuine frontier.  (Computed from the
-        trace moments, which SLQ estimates robustly.)"""
+        trace moments, which SLQ estimates robustly.)
+
+        ``with_err=True`` → (value, stderr): Φ₁ is a STOCHASTIC estimate like
+        any trace read — the bar is the scatter of per-probe Φ₁ values."""
         m1, m2 = self.moment(1), self.moment(2)
-        return float(m1 * m1 / m2) if m2 > 0 else 1.0
+        val = float(m1 * m1 / m2) if m2 > 0 else 1.0
+        if not with_err:
+            return val
+        if not self.probe_sizes or len(self.probe_sizes) < 2:
+            raise ValueError("error bars need the probe structure from "
+                             "Spectral.of with probes >= 2")
+        p = len(self.probe_sizes)
+        ests, i = [], 0
+        for sz in self.probe_sizes:
+            nd, wt = self.nodes[i:i + sz], self.weights[i:i + sz] * p
+            mm1 = float(self.N) * float(np.sum(wt * nd))
+            mm2 = float(self.N) * float(np.sum(wt * nd ** 2))
+            ests.append(mm1 * mm1 / mm2 if mm2 > 0 else 1.0)
+            i += sz
+        return val, float(np.std(ests, ddof=1) / np.sqrt(p))
 
     # ── internals ─────────────────────────────────────────────────────────────
     def _require_matvec(self, other):

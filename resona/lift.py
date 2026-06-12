@@ -12,6 +12,10 @@ resona.lift — the LIFT: make a nonlinear / composed map LINEAR in a lifted bas
   z_j = xʲ evolve LINEARLY ż = M z (truncated): solve a nonlinear ODE by one
   matrix exponential exp(tM)·z0 (resona.apply).  Over a finite field GF(p) the
   same lift makes ANY logic function an EXACT linear polynomial (x^p ≡ x).
+
+And one BRIDGE: `koopman` — data → operator (the data-driven Carleman): a
+trajectory matrix becomes the ACTION of its own propagator, so the whole
+library's spectral reads land on dynamics data.
 """
 import numpy as np
 

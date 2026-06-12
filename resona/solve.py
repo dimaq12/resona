@@ -78,6 +78,9 @@ def catastrophe_solve(coeffs_exact, target_digits=15, cluster_tol=0.1):
 def rayleigh_polish(A, sigma, N=None, iters=6, v0=None, seed=0, tol=0.0):
     """Polish ONE eigenvalue near the shift `sigma` to machine precision.
 
+    (`sigma` is the SHIFT — a Ritz seed near the target eigenvalue, in the
+    classical shifted-inverse-iteration sense; not a standard deviation.)
+
     Shifted inverse iteration with Rayleigh-quotient updates — cubic convergence
     for symmetric operators.  `A` is a dense/sparse matrix OR a matvec callable
     (then pass N).  Seed `sigma` from `resona.of(...).nodes` (the Ritz values).

@@ -21,6 +21,7 @@ python3 examples/<dir>/<name>.py
 | `inverse_spectral.py` | hear the shape of an operator — the inverse of `of` (`from_measure`) | recover 3e-7; eigenvalues-alone fail |
 | `signals.py`, `image_anomaly.py` | spectral analysis of 1D signals / images | — |
 | 🎯 `covariance_cleaning.py` | FREE DECONVOLUTION: un-add MP noise from a sample covariance (RIE) | 1.81x closer, 95% of oracle; risk self-deception 4.15x → 0.94x |
+| 🎯 `defect_spectroscopy.py` | the solver's ERROR read back as physics (generator + band spectrum) | generator to 4.2e-5 (Richardson-checked); barycentre holds 5% noise, ratio dies at 1e-5 |
 | 🎯 `certified_logdet.py` | Gauss–Radau brackets: the answer PROVABLY inside | GP variance certified, width →3.8e-4; truncation vs scatter separated |
 
 ## quantum/ — one dial (Φ₁), many problems · [details](quantum/README.md)

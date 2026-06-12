@@ -15,7 +15,7 @@ slows to a crawl at the spectral EDGE (critical slowing) — the defect / edge o
 chaos of free probability's own computation.
 """
 import numpy as np
-from .lift import _nw, cauchy            # cauchy lives in lift (the transform module)
+from .lift import _nw, cauchy as _cauchy   # internal; the public read is lift.cauchy / s.cauchy
 
 
 def pastur(GA, z, sigma2, iters=2000, tol=1e-13, damp=0.5):
@@ -64,3 +64,30 @@ def averaged_dos(spectral, sigma, xs, eta=1e-3, g0=None):
     return np.maximum(-g.imag / np.pi, 0.0)
     # (the moment version μ_A ⊞ semicircle is just resona.lift.free_convolution
     #  with a semicircle, or read off as m₂ = m₂(A) + σ² — no separate function.)
+
+
+def contraction(spectral, xs, sigma2, eta=1e-9):
+    """|T′(g*)| — the stability of the Pastur fixed point at each x.
+
+    The subordination iteration g ← G_A(z − σ²g) contracts at rate
+    |T′(g*)| = σ²·|G_A′(z − σ²g*)|.  Near a spectral EDGE of μ_A ⊞ sc(σ²)
+    this number approaches 1 and the computation critically slows — the
+    defect / edge-of-chaos of free probability's own fixed point.  This is
+    a PURE READ: it returns the measured contraction, nothing else; compare
+    to 1 yourself (≳0.95 ⇒ expect slow convergence, you are near an edge).
+    Note this is a SOLVER-STABILITY diagnostic (of the fixed-point iteration
+    itself), not a property of the spectral measure.
+
+    HONEST LIMIT (measured, FA/revise_stress): the critical window where
+    |T′| visibly rises is NOT universal — it narrows with σ² and the edge's
+    curvature (a soft edge at σ²=0.1 reads only ~0.3 at distance 1e-3).
+    The observable is exact regardless; the window is physics.
+    """
+    nodes, w = _nw(spectral)
+    w = w / w.sum()
+    Z = np.atleast_1d(np.asarray(xs, float)) + 1j * eta
+    g = pastur_grid(spectral, Z, sigma2)
+    zeff = Z - sigma2 * g
+    Gp = -(w[None, :] / (zeff[:, None] - nodes[None, :]) ** 2).sum(1)
+    out = sigma2 * np.abs(Gp)
+    return out if out.size > 1 else float(out[0])

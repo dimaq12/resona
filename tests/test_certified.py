@@ -128,3 +128,23 @@ def test_zoom_sparse_window_machine_nodes():
     big = z.nodes[(z.nodes > 4.8) & (z.weights > 1e-5)]
     for target in (5.0, 5.2, 5.45):
         assert np.min(np.abs(big - target)) < 1e-9   # isolated: machine-grade
+
+
+def test_polish_guards():
+    import pytest as _pt
+    N = 200
+    A = _psd(N)
+    s = Spectral.of(lambda v: A @ v, N, k=16, probes=4)
+    with _pt.raises(ValueError):
+        s.trace("log", certified=True, with_err=True, support=(0.4, None))
+    with _pt.raises(ValueError):
+        s.zoom(2.0, 1.0)                       # a >= b refused
+    val, err = s.effective_rank(with_err=True)
+    assert err > 0 and abs(val - s.effective_rank()) < 1e-12
+    from resona.free import rie_clean
+    with _pt.raises(ValueError):
+        rie_clean(np.ones(10), q=3.0)          # q outside MP domain
+    from resona.wkernel import track
+    with _pt.raises(ValueError):
+        track(np.array([[0., 9.], [0., 1.]]), [np.eye(2)],
+              np.linspace([0.], [1.], 3))      # non-symmetric A0 refused

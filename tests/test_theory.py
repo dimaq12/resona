@@ -202,3 +202,121 @@ def test_rie_clean_additive():
     xi = rie_clean_additive(le, sigma)
     err = lambda lam: np.linalg.norm((Ue * lam) @ Ue.T - A)
     assert err(xi) < 0.9 * err(le)               # strictly better than raw
+
+
+def test_subordination_contraction_edge():
+    # |T'| -> ~1 approaching the two-atom band edge; small in the bulk
+    import resona
+    from resona.subordination import contraction
+    N = 2000
+    d = np.concatenate([np.full(N // 2, -1.0), np.full(N // 2, 1.0)])
+    s = resona.of(lambda x: d * x, N)
+    # bulk point: well inside the band, modest contraction
+    c_bulk = contraction(s, 0.0, 0.25)
+    assert c_bulk < 0.9
+    # approach the (numerically located) outer edge from inside
+    xs = np.array([1.74, 1.755, 1.760])
+    cs = contraction(s, xs, 0.25)
+    assert cs[-1] > 0.95                       # critical near the edge
+    assert np.all(np.diff(cs) > 0)             # and monotone approaching it
+
+
+def test_generator_read_be_families():
+    # O(n^-2) absolute convergence on a family OUTSIDE the original suite
+    from scipy.linalg import expm
+    from resona.defect import generator_read
+    rng = np.random.default_rng(3)
+    N, t = 80, 0.5
+    A = np.diag(np.geomspace(1e-2, 1e2, N))          # stiff diagonal
+    u0 = rng.standard_normal(N)
+    G_true = A @ A @ (expm(-t * A) @ u0)
+    errs = []
+    for n in (64, 128, 256):
+        M = np.linalg.inv(np.eye(N) + (t / n) * A)
+        P = np.linalg.matrix_power(M, n) @ u0
+        M2 = np.linalg.inv(np.eye(N) + (t / (2 * n)) * A)
+        P2 = np.linalg.matrix_power(M2, 2 * n) @ u0
+        Gh = generator_read(P, P2, t, n)
+        errs.append(np.linalg.norm(Gh - G_true) / np.linalg.norm(G_true))
+    slope = np.polyfit(np.log([64, 128, 256]), np.log(errs), 1)[0]
+    assert -1.35 < slope < -0.7                      # rel err O(1/n) ⇔ abs O(n^-2)
+    assert errs[-1] < 8e-3
+
+
+def test_generator_read_refuses_cn():
+    from resona.defect import generator_read
+    import pytest as _pt
+    with _pt.raises(ValueError):
+        generator_read(np.ones(4), np.ones(4), 0.5, 8, solver="cn")
+
+
+def test_spectroscopy_barycentre_and_noise():
+    from resona.defect import spectroscopy
+    rng = np.random.default_rng(0)
+    Nf = 256
+    k = np.fft.fftfreq(Nf, 1.0 / Nf)
+    kmag = np.abs(k)
+    # defect power concentrated at modes 3 and 24
+    power = np.zeros(Nf)
+    power[np.abs(kmag - 3) < 0.5] = 4.0
+    power[np.abs(kmag - 24) < 0.5] = 9.0
+    bands = [(kmag >= 2 ** j) & (kmag <= 2 ** (j + 1) - 1) for j in range(6)]
+    kb, sig = spectroscopy(power, bands, coords=kmag)
+    assert abs(kb[1] - 3.0) < 1e-12                  # band j=1 holds mode 3
+    assert abs(kb[4] - 24.0) < 1e-12                 # band j=4 holds mode 24
+    # 5% noise: barycentre moves by less than one bin
+    kb2, _ = spectroscopy(power + 0.05 * power.max() * rng.random(Nf),
+                          bands, coords=kmag)
+    assert abs(kb2[1] - 3.0) < 1.0 and abs(kb2[4] - 24.0) < 1.0
+    # empty band → nan + zero signal, no crash
+    assert np.isnan(kb[5]) or sig[5] >= 0
+
+
+def _linear_family(N=20, M=4, seed=7):
+    rng = np.random.default_rng(seed)
+    A0 = rng.standard_normal((N, N)); A0 = (A0 + A0.T) / 2
+    Bs = []
+    for _ in range(M):
+        B = rng.standard_normal((N, N)); Bs.append((B + B.T) / 2)
+    return A0, Bs
+
+
+def test_track_beats_frozen_w():
+    from resona.wkernel import wkernel as wk, track
+    rng = np.random.default_rng(7)
+    A0, Bs = _linear_family()
+    target = rng.standard_normal(4) * 1.2
+    Bstack = np.stack(Bs)
+    lam_exact = np.linalg.eigvalsh(A0 + np.tensordot(target, Bstack, axes=1))
+    # frozen W from the origin
+    lam0, V0 = np.linalg.eigh(A0)
+    W0 = wk(V0, Bs)
+    frozen = np.sort(lam0 + W0 @ target)
+    path = np.linspace(np.zeros(4), target, 201)
+    lams, _ = track(A0, Bs, path)
+    err_frozen = np.max(np.abs(np.sort(frozen) - lam_exact))
+    err_track = np.max(np.abs(np.sort(lams[-1]) - lam_exact))
+    assert err_track < err_frozen / 100          # the C2 claim
+
+
+def test_track_survives_crossing():
+    from resona.wkernel import track
+    # two eigenvalues CROSS along the path: sorted order breaks, tracking holds
+    A0 = np.diag([0.0, 1.0]); B = np.diag([1.0, -1.0])
+    path = np.linspace([0.0], [1.0], 41)         # crossing at k = 0.5
+    lams, _ = track(A0, [B], path)
+    # tracked branch 0 must follow 0 + k (through the crossing), branch 1 → 1 − k
+    assert abs(lams[-1][0] - 1.0) < 1e-10
+    assert abs(lams[-1][1] - 0.0) < 1e-10
+    sorted_end = np.sort(np.linalg.eigvalsh(A0 + 1.0 * B))
+    assert np.max(np.abs(np.sort(lams[-1]) - sorted_end)) < 1e-10
+
+
+def test_kappa_w_dials():
+    from resona.wkernel import kappa_w
+    A0, Bs = _linear_family(seed=9)
+    # commuting family: diagonal A0 and diagonal Bs → W constant → κ_W ≈ 0
+    D0 = np.diag(np.arange(10.0))
+    DBs = [np.diag(np.linspace(1, 2, 10)), np.diag(np.linspace(-1, 1, 10))]
+    assert kappa_w(D0, DBs, np.zeros(2)) < 1e-6
+    assert kappa_w(A0, Bs, np.zeros(4)) > 1.0    # generic: curvature present

@@ -22,7 +22,7 @@ budget: large β·‖H‖ or t·‖H‖ may need larger k — verified against d
 ground truth in tests on small chains.
 """
 import numpy as np
-from .spectral import apply
+from .spectral import apply as _apply
 
 __all__ = ["state", "expect", "correlator"]
 
@@ -34,7 +34,7 @@ def state(Hmv, beta, N, seed=0, k=64):
     Z ≈ N · E_r[weight]."""
     rng = np.random.default_rng(seed)
     r = rng.standard_normal(N) / np.sqrt(N)
-    psi = apply(Hmv, lambda lam: np.exp(-0.5 * beta * lam), r, k=k)
+    psi = _apply(Hmv, lambda lam: np.exp(-0.5 * beta * lam), r, k=k)
     w = float(np.real(np.vdot(psi, psi)))
     return psi / np.sqrt(w), w * N
 
@@ -77,7 +77,7 @@ def correlator(Hmv, Omv, beta, ts, N, probes=4, k=64, seed=0):
             # matvecs; per-step Krylov error ~1e-12 accumulates linearly and
             # stays far below the typicality noise
             dt = float(dts[0])
-            step = lambda v: apply(Hmv, lambda lam: np.exp(-1j * dt * lam),
+            step = lambda v: _apply(Hmv, lambda lam: np.exp(-1j * dt * lam),
                                    v, k=k, hermitian=False)
             psi_t, phi_t = psi.astype(complex), phi
             for i, t in enumerate(ts):
@@ -89,9 +89,9 @@ def correlator(Hmv, Omv, beta, ts, N, probes=4, k=64, seed=0):
                 if t == 0.0:
                     psi_t, phi_t = psi.astype(complex), phi
                 else:
-                    psi_t = apply(Hmv, lambda lam: np.exp(-1j * t * lam),
+                    psi_t = _apply(Hmv, lambda lam: np.exp(-1j * t * lam),
                                   psi.astype(complex), k=k, hermitian=False)
-                    phi_t = apply(Hmv, lambda lam: np.exp(-1j * t * lam),
+                    phi_t = _apply(Hmv, lambda lam: np.exp(-1j * t * lam),
                                   phi, k=k, hermitian=False)
                 out[p, i] = np.vdot(psi_t, np.asarray(Omv(phi_t), complex))
     return (out * wts[:, None]).sum(0) / wts.sum()

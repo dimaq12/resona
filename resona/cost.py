@@ -22,7 +22,10 @@ from scipy.linalg import hankel, svdvals
 
 
 def phi1(spectral):
-    """Φ₁ = Tr(A)²/Tr(A²) — the global cost summary (participation ratio)."""
+    """Thin ALIAS of ``Spectral.effective_rank()`` — prefer the method.
+
+    Kept for the theory-side vocabulary (the Extraction Law speaks of Φ₁);
+    adds nothing computationally."""
     return spectral.effective_rank()
 
 
@@ -37,11 +40,19 @@ def lift_rank(signal, k=60):
 
 
 def is_extractable(signal, windows=(20, 40, 80, 120), grow=0.25):
-    """Removable-vs-genuine test by lift-rank SATURATION.
+    """The REMOVABLE-vs-GENUINE dichotomy, read by lift-rank saturation.
 
-    Returns (extractable: bool, ranks: list).  Saturates (rank flattens, stays a
-    small fraction of the window) ⇒ removable ⇒ extractable.  Keeps growing ~k ⇒
-    no finite chart ⇒ genuine wall.
+    REMOVABLE singularity (shock, exceptional point, pole): a FINITE lift
+    linearizes it — the trajectory rank SATURATES with the window; the
+    apparent wall is a coordinate artifact and the answer extracts through
+    it.  GENUINE wall (structureless, e.g. aˣ mod N): rank GROWS ~ window —
+    no finite chart exists, extraction stays extensive.
+
+    Returns (extractable: bool, ranks: list).  The binary cutoff (`grow`)
+    was calibrated on sharp walls; for borderline dynamics (e.g. Lorenz at
+    coarse sampling) read the RANK CURVE itself — see
+    examples/science/koopman_dynamics.py, where the curve is unambiguous
+    while the binary is lenient.
     """
     ranks = [lift_rank(signal, k) for k in windows]
     # genuine if the rank is still climbing with the window (chart never closes)
