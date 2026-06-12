@@ -196,6 +196,40 @@ single object behind both the catastrophe-hardness law and a solvability axis.  
 demonstration, not a theorem.  Open: tie the Galois axis to actual numerical cost
 (unsolvable ⇏ ill-conditioned — they are genuinely orthogonal), and the D/E series.
 
+
+## 5. The zeros of ζ on the bench — the ascent, the saturation law, the rigid operator
+
+The synthesizer (`from_measure`) turned the Hilbert–Pólya question quantitative:
+*existence* of a self-adjoint operator with the zeta-zero spectrum is trivial —
+**structure** is the question.  Three measured results
+(`examples/science/hilbert_polya.py`, `zeta_ascent.py`, `theory/zeta_saturation.py`,
+on Odlyzko's published tables — first 100k zeros, zeros #10^12+…, #10^21+…):
+
+- **The zeta operator is realized and lawful.**  The Jacobi (tridiagonal, 1-D
+  local) operator with the first 200 zeros as spectrum exists to 2.8e-13; its
+  smooth hopping profile is exactly the Riemann–von Mangoldt (Weyl) density
+  (corr 0.9996 with the rigid pure-N̄ realization).
+- **The ascent.**  At fixed window M=800 the operator's hopping fluctuations are
+  SMOOTHER than density-matched GUE controls, and the excess decays monotonically
+  up the critical line: 1.42× (t≈10²) → 1.29× (7.5·10⁴) → 1.18× (#10^12) →
+  1.06× (#10^21) — the operator-coefficient face of Odlyzko's GUE convergence.
+- **The saturation law.**  The number variance Σ²(L) departs from the exact GUE
+  curve at  **L_sat ≈ ln(t/2π)**  mean spacings — measured 0.91 / 0.96 / 0.97 ×
+  ln(t/2π) at δ=10% across **eighteen decades of height** (criterion-stable as a
+  law; the absolute constant carries the δ-convention).  That is ln 2 × the
+  wavelength of the prime-2 periodic orbit, Λ₂ = ln(t/2π)/ln 2 — Berry's
+  saturation, recovered from public data with a 0.5-second script.  The plateau
+  follows his (1/π²)·ln ln t to ±0.02.
+
+*Honest:* all three are numerical observations with controls and error bars on
+classical objects (Berry 1988; Odlyzko 1987; Montgomery–Odlyzko) — the
+contribution is making them *executable* against the library's dials, plus one
+negative sub-result recorded in `theory/zeta_saturation.py`: the small-window
+(M=64…512) Jacobi collapse in M/L* is statistically weak — the β-dial needs
+M ≳ 800 to see the rigidity excess cleanly.  Open: does the zeta operator's
+(α, β) fluctuation sequence itself encode the primes (the β-residuals as a
+trace formula in Jacobi coordinates)?
+
 ---
 
 *Everything above is synthesis of established results (Voiculescu, Speicher,
