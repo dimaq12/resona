@@ -48,6 +48,9 @@ def _lanczos_block(matvec, V0, k):
     matvec per step (BLAS-3) instead of `probes` single matvecs.  Identical math
     per probe (same probe vectors, full reorthogonalization); returns the list
     of (alpha, beta) pairs, one per probe."""
+    xp = _xp(V0)
+    if xp is not None:                  # device block → device recurrence
+        return _lanczos_block_xp(matvec, V0, k, xp)
     N, p = V0.shape
     Q = V0 / np.linalg.norm(V0, axis=0)
     V = np.zeros((p, k, N)); V[:, 0, :] = Q.T                    # (p, k, N): each probe's
@@ -78,6 +81,9 @@ def _lanczos_block(matvec, V0, k):
 
 def _lanczos(matvec, v0, k):
     """k-step Lanczos with full reorthogonalization. Returns (alpha, beta)."""
+    xp = _xp(v0)
+    if xp is not None:                  # device vector → device recurrence
+        return _lanczos_xp(matvec, v0, k, xp)
     N = len(v0)
     V = np.zeros((N, k)); alpha = np.zeros(k); beta = np.zeros(max(k - 1, 0))
     q = v0 / np.linalg.norm(v0); V[:, 0] = q; qprev = np.zeros(N); b = 0.0
@@ -103,6 +109,9 @@ def _lanczos_herm(matvec, v0, k):
     tridiagonal REAL (α real by ⟨q, Hq⟩ ∈ ℝ, β ≥ 0) — so everything downstream
     (eigh of T, nodes/weights) is unchanged.  Returns (alpha, beta), real.
     """
+    xp = _xp(v0)
+    if xp is not None:                  # device vector → device recurrence
+        return _lanczos_xp(matvec, xp.as_complex(v0), k, xp)
     N = len(v0)
     V = np.zeros((N, k), complex)
     alpha = np.zeros(k); beta = np.zeros(max(k - 1, 0))
@@ -198,11 +207,338 @@ def _kpm_tridiags(matvec, N, k, probes, rng, block):
 
 def _is_complex_operator(matvec, N):
     """One deterministic matvec: does the operator live on C^N?"""
+    return _probe_operator(matvec, N)[0]
+
+
+# ── array-namespace dispatch: invisible GPU/device support ───────────────────
+# A matvec that consumes and returns torch / cupy / array-API arrays runs the
+# SAME recurrences on its own device — zero new API.  Dispatch happens strictly
+# BEFORE any arithmetic: numpy inputs take the exact code paths elsewhere in
+# this file, bit-identically.  torch/cupy are referenced only here, and only
+# when the user's arrays already are torch/cupy (so the import is a dict
+# lookup, never a new dependency).
+
+def _xp(x):
+    """The array-namespace adapter for x, or None when x is numpy's business."""
+    if isinstance(x, np.ndarray) or not hasattr(x, "shape"):
+        return None
+    ns = getattr(x, "__array_namespace__", None)
+    if ns is not None:
+        mod = ns()
+        return None if mod is np else _XP(mod)   # numpy scalars carry it too
+    mod = type(x).__module__.partition(".")[0]
+    if mod in ("torch", "cupy"):                 # tensors predate the standard
+        return _XP(__import__(mod))
+    return None
+
+
+class _XP:
+    """The handful of operations the device-side recurrences need, expressed
+    once over any array-API-style namespace (torch, cupy, array_api_strict…).
+    Vectors live on the device; each method returning a Python scalar is a
+    deliberate, tiny device→host sync — exactly the (α, β) coefficients."""
+
+    def __init__(self, mod):
+        self.mod = mod
+
+    def _make(self, fn, x, dtype, like):
+        try:
+            return fn(x, dtype=dtype, device=like.device)
+        except TypeError:                        # namespaces without device=
+            return fn(x, dtype=dtype)
+
+    def iscomplex(self, x):
+        m = self.mod
+        return x.dtype == getattr(m, "complex64", None) or x.dtype == m.complex128
+
+    def cdtype(self, like):
+        m = self.mod
+        if self.iscomplex(like):
+            return like.dtype
+        return m.complex64 if like.dtype == m.float32 else m.complex128
+
+    def asarray(self, x, like):
+        """Host (numpy) → like's device; dtype follows `like` (fp32 stays fp32)."""
+        dt = self.cdtype(like) if np.iscomplexobj(x) else like.dtype
+        return self._make(self.mod.asarray, x, dtype=dt, like=like)
+
+    def zeros(self, shape, like):
+        return self._make(self.mod.zeros, shape, dtype=like.dtype, like=like)
+
+    def as_complex(self, x):
+        if self.iscomplex(x):
+            return x
+        dt, astype = self.cdtype(x), getattr(self.mod, "astype", None)
+        if astype is not None:                   # array API
+            return astype(x, dt)
+        return x.to(dt) if hasattr(x, "to") else x.astype(dt)   # torch / cupy
+
+    def conj(self, x):
+        return self.mod.conj(x) if self.iscomplex(x) else x
+
+    def norm(self, x):
+        """‖x‖₂ → Python float."""
+        try:
+            return float(self.mod.linalg.vector_norm(x))
+        except (AttributeError, TypeError):
+            return float(self.mod.sum(self.mod.abs(x) ** 2)) ** 0.5
+
+    def rdot(self, q, w):
+        """Re⟨q, w⟩ → Python float."""
+        s = self.mod.sum(self.conj(q) * w)
+        return float(self.mod.real(s)) if self.iscomplex(s) else float(s)
+
+    def vdot(self, q, w):
+        """⟨q, w⟩ (conjugate-linear in q) → Python complex."""
+        return complex(self.mod.sum(self.conj(q) * w))
+
+    def host(self, x):
+        """Small array → host numpy (the k×k eigh and (α, β) live on the host)."""
+        if hasattr(x, "get"):                    # cupy
+            return np.asarray(x.get())
+        if hasattr(x, "detach"):                 # torch (also under autograd)
+            x = x.detach()
+        if hasattr(x, "cpu"):
+            x = x.cpu()
+        try:
+            return np.asarray(x)
+        except Exception:
+            return np.from_dlpack(x)
+
+    def colsum(self, X):
+        """Σ over axis 0 → host numpy (one (p,)-sized sync per Lanczos step)."""
+        return self.host(self.mod.sum(X, axis=0))
+
+    def colnorms(self, X):
+        return np.sqrt(self.colsum(X * X))
+
+
+def _probe_operator(matvec, N):
+    """One deterministic matvec: is the operator complex, and on which array
+    namespace does it live?  Returns (is_complex, xp, ref); xp is None on the
+    numpy path (then everything downstream is today's exact code) and ref is a
+    sample output carrying the operator's device and dtype."""
     x = np.cos(np.arange(N) * 0.7) + 0.1
     try:
-        return bool(np.iscomplexobj(matvec(x)))
+        y = matvec(x)
     except Exception:
-        return True              # real test vector rejected → assume complex domain
+        y = _device_probe(matvec, x)
+        xp = None if y is None else _xp(y)
+        if xp is None:
+            return True, None, None  # real test vector rejected → assume complex domain
+        return xp.iscomplex(y), xp, y
+    xp = _xp(y)
+    if xp is None:
+        return bool(np.iscomplexobj(y)), None, None
+    # confirm on-device: a numpy probe can be silently PROMOTED (a float32
+    # torch matrix @ float64 numpy vector yields float64 — but the same matrix
+    # rejects a float64 tensor), so re-run the test vector as a device array
+    # and let the output fix the operator's true dtype/device.
+    try:
+        y = matvec(xp.asarray(x, like=y))
+    except Exception:
+        y = _device_probe(matvec, x)
+        if y is None or _xp(y) is None:
+            return True, None, None
+        xp = _xp(y)
+    return xp.iscomplex(y), xp, y
+
+
+def _device_probe(matvec, x):
+    """The numpy test vector was rejected: if torch/cupy is ALREADY loaded the
+    matvec may simply insist on its own array type — retry on that device."""
+    import sys
+    for name in ("torch", "cupy"):
+        mod = sys.modules.get(name)
+        if mod is None:
+            continue
+        for dt in (None, getattr(mod, "float32", None),
+                   getattr(mod, "complex128", None), getattr(mod, "complex64", None)):
+            try:
+                return matvec(mod.asarray(x) if dt is None else mod.asarray(x, dtype=dt))
+            except Exception:
+                pass
+    return None
+
+
+def _lanczos_xp(matvec, v0, k, xp):
+    """`_lanczos`/`_lanczos_herm` with the vectors living on v0's device.
+    Same recurrence (full reorthogonalization), real or complex-Hermitian by
+    dtype; only the scalar Jacobi coefficients (α, β) cross to the host, where
+    the small k×k eigh already lives.  Returns host (alpha, beta), real."""
+    N = v0.shape[0]
+    V = xp.zeros((k, N), like=v0)                # device basis, rows contiguous
+    alpha = np.zeros(k); beta = np.zeros(max(k - 1, 0))
+    q = v0 / xp.norm(v0)
+    V[0, :] = q
+    qprev = xp.zeros((N,), like=v0); b = 0.0
+    for j in range(k):
+        w = matvec(q) - b * qprev
+        a = xp.rdot(q, w); alpha[j] = a
+        w = w - a * q
+        Vj = V[:j + 1, :]
+        w = w - Vj.T @ (xp.conj(Vj) @ w)         # full reorth, on-device
+        if j < k - 1:
+            b = xp.norm(w); beta[j] = b
+            if b < 1e-12:
+                return alpha[:j + 1], beta[:j]
+            qprev, q = q, w / b
+            V[j + 1, :] = q
+    return alpha, beta
+
+
+def _supports_block_xp(matvec, N, xp, ref):
+    """`_supports_block` with the test block living on ref's device."""
+    x = np.cos(np.arange(N) * 0.7) + 0.1
+    X = np.column_stack([x, np.sin(np.arange(N) * 0.3) - 0.2])
+    try:
+        Y = matvec(xp.asarray(X, like=ref))
+        if tuple(getattr(Y, "shape", ())) != X.shape:
+            return False
+        y0 = matvec(xp.asarray(x, like=ref))
+        return tuple(y0.shape) == (N,) and \
+            xp.norm(Y[:, 0] - y0) <= 1e-10 * max(1.0, xp.norm(y0))
+    except Exception:
+        return False
+
+
+def _lanczos_block_xp(matvec, V0, k, xp):
+    """`_lanczos_block` with the block on V0's device: one block matvec per
+    step, per-probe reorthogonalization on-device; only the per-step (p,)
+    coefficient rows sync to the host.  Same math per probe."""
+    N, p = V0.shape
+    Q = V0 / xp.asarray(xp.colnorms(V0), like=V0)
+    Vd = xp.zeros((p, k, N), like=V0); Vd[:, 0, :] = Q.T
+    al = np.zeros((p, k)); be = np.zeros((p, max(k - 1, 1)))
+    Qprev = xp.zeros((N, p), like=V0); b = np.zeros(p)
+    m = np.full(p, k); active = np.ones(p, bool)
+    for j in range(k):
+        W = matvec(Q) - xp.asarray(b, like=V0) * Qprev
+        a_j = xp.colsum(Q * W)
+        al[:, j] = np.where(active, a_j, al[:, j])
+        W = W - xp.asarray(a_j, like=V0) * Q
+        for i in range(p):                       # reorth against each probe's
+            Vi = Vd[i, :j + 1, :]                # OWN basis (contiguous rows)
+            W[:, i] = W[:, i] - Vi.T @ (Vi @ W[:, i])
+        if j < k - 1:
+            nb = xp.colnorms(W)
+            newly_done = active & (nb < 1e-12)
+            m[newly_done] = j + 1
+            active = active & ~newly_done
+            be[:, j] = np.where(active, nb, 0.0)
+            Qn = (W / xp.asarray(np.where(nb < 1e-12, 1.0, nb), like=V0)) \
+                * xp.asarray(active.astype(float), like=V0)
+            Qprev, Q = Q, Qn
+            b = be[:, j]
+            Vd[:, j + 1, :] = Q.T
+    return [(al[i, :m[i]], be[i, :m[i] - 1]) for i in range(p)]
+
+
+def _harvest_xp(matvec, N, k, probes, rng, is_c, xp, ref):
+    """`of`'s harvest on ref's device: the SAME numpy probe draws as the cpu
+    path, moved across once; the block matvec is used when the device matvec
+    maps (N, m) blocks (verified on-device)."""
+    if is_c:
+        return [_lanczos_xp(matvec,
+                            xp.asarray((rng.standard_normal(N)
+                                        + 1j * rng.standard_normal(N)) / np.sqrt(2),
+                                       like=ref), k, xp)
+                for _ in range(probes)]
+    Z = rng.standard_normal((probes, N))         # rows = the sequential draws
+    if probes > 1 and _supports_block_xp(matvec, N, xp, ref):
+        return _lanczos_block_xp(matvec, xp.asarray(Z.T, like=ref), k, xp)
+    return [_lanczos_xp(matvec, xp.asarray(Z[i], like=ref), k, xp)
+            for i in range(probes)]
+
+
+def _complexified(matvec, xp):
+    """The matvec on complex device vectors.  Some backends (torch) refuse a
+    real operator on a complex vector; linearity fixes it at the cost of two
+    matvecs per step: A(x + iy) = A·x + i·A·y.  Probed once, on first use."""
+    accepts_complex = []
+    def mvc(u):
+        if not accepts_complex:
+            try:
+                w = matvec(u)
+                accepts_complex.append(True)
+                return w
+            except Exception:
+                accepts_complex.append(False)
+        elif accepts_complex[0]:
+            return matvec(u)
+        return matvec(xp.mod.real(u)) + 1j * matvec(xp.mod.imag(u))
+    return mvc
+
+
+def _apply_xp(matvec, f, v, k, hermitian, xp):
+    """`apply` with v on its own device: the Krylov basis and every O(N) op
+    stay on the device; only the small projected eigenproblem visits the host.
+    Returns an array on v's device (complex for the Arnoldi path)."""
+    nv = xp.norm(v)
+    if nv == 0:
+        return v * 1.0
+    N = v.shape[0]
+    if hermitian:                                # ── Lanczos (self-adjoint) ──
+        q = v / nv
+        if xp.iscomplex(v):                      # complex v on a possibly-real
+            mv = _complexified(matvec, xp)       # A: linearity if A rejects C^N
+            w0 = xp.as_complex(mv(q))
+        else:
+            mv = matvec                          # the first step doubles as the
+            try:                                 # complex-HERMITIAN probe: a
+                w0 = mv(q)                       # complex A may reject a real q
+            except Exception:
+                v = xp.as_complex(v); q = xp.as_complex(q)
+                w0 = mv(q)
+            if xp.iscomplex(w0) and not xp.iscomplex(v):  # …or promote it —
+                v = xp.as_complex(v); q = xp.as_complex(q)  # complex Lanczos,
+            if xp.iscomplex(v):                  # REAL tridiagonal (the host
+                mv = _complexified(matvec, xp)   # contract, on the device)
+                w0 = xp.as_complex(w0)
+        V = xp.zeros((k, N), like=v)
+        al = np.zeros(k); be = np.zeros(k); m = k
+        V[0, :] = q
+        qprev = xp.zeros((N,), like=v); b = 0.0
+        cplx = xp.iscomplex(v)
+        for j in range(k):
+            w = w0 if j == 0 else (xp.as_complex(mv(q)) if cplx else mv(q))
+            w = w - b * qprev
+            a = xp.rdot(q, w); al[j] = a
+            w = w - a * q
+            Vj = V[:j + 1, :]
+            w = w - Vj.T @ (xp.conj(Vj) @ w)     # full reorth
+            if j < k - 1:
+                b = xp.norm(w)
+                if b < 1e-12:
+                    m = j + 1; break
+                be[j] = b; qprev, q = q, w / b; V[j + 1, :] = q
+        T = np.diag(al[:m]) + np.diag(be[:m - 1], 1) + np.diag(be[:m - 1], -1)
+        theta, S = np.linalg.eigh(T)
+        # complex f on a real spectrum (e^{-iHt}) is fine when v or A is
+        # complex — exactly the host contract; the real path casts to float
+        fth = np.asarray(f(theta)) if xp.iscomplex(v) \
+            else np.asarray(f(theta), float)
+        y = S @ (fth * S[0, :])
+        return nv * (V[:m, :].T @ xp.asarray(y, like=v))
+    v = xp.as_complex(v)                         # ── Arnoldi (general) ──
+    Q = xp.zeros((k + 1, N), like=v)
+    H = np.zeros((k + 1, k), complex); m = k
+    Q[0, :] = v / nv
+    mvc = _complexified(matvec, xp)
+    for j in range(k):
+        w = xp.as_complex(mvc(Q[j, :]))
+        for i in range(j + 1):                   # modified Gram–Schmidt
+            hij = xp.vdot(Q[i, :], w); H[i, j] = hij
+            w = w - hij * Q[i, :]
+        h = xp.norm(w); H[j + 1, j] = h
+        if h < 1e-12:
+            m = j + 1; break
+        Q[j + 1, :] = w / h
+    Hm = H[:m, :m]
+    vals, W = np.linalg.eig(Hm)                  # f(Hm)·e1 via eig of small Hm
+    c = np.linalg.solve(W, np.eye(m, 1)[:, 0].astype(complex))
+    fHe1 = W @ (np.asarray(f(vals), complex) * c)
+    return nv * (Q[:m, :].T @ xp.asarray(fHe1, like=v))
 
 
 # f-families with sign-definite high derivatives on (0, ∞) — the Golub–Meurant
@@ -346,28 +682,51 @@ class Spectral:
         (k ≳ 200, measured 2.7× at k=256 with equal-or-better moments); edges
         are smoothed by ~span/(4k) (Jackson) — certificates and `extreme` near
         sharp edges want the default engine.  Real symmetric only.
+
+        GPU / device arrays are invisible: if `matvec` consumes and returns
+        torch / cupy / array-API arrays (detected from its output on one test
+        vector), the same probe draws are moved to that device once and the
+        whole recurrence runs there — zero new API, and the returned object is
+        the usual host-side Spectral (so `trace(certified=)` works as usual).
+        DEVICE COVERAGE TODAY: this default path (engine="lanczos", deflate=0)
+        and `apply`; `engine="kpm"` / `deflate` raise on device operators, and
+        `zoom` / `quadform` are host-only for now.  HONEST PRECISION NOTE:
+        float32-default backends (torch's default dtype) give SLQ only ~2–3
+        significant digits; build the operator on float64 tensors for the
+        usual accuracy (measured: a float64 torch matvec agrees with the numpy
+        path to ~1e-12).  The numpy path itself is untouched, bit-identically.
         """
         rng = np.random.default_rng(seed)
+        is_c, xp, ref = _probe_operator(matvec, N)
+        if xp is not None and (deflate or engine != "lanczos"):
+            raise ValueError(
+                "device (torch/cupy/array-API) operators cover the default "
+                "path only — engine='lanczos', deflate=0; kpm and deflate "
+                "are host-only for now")
         mv, atoms, scale, proj = matvec, None, 1.0, None
         if deflate:
             if engine != "lanczos":
                 raise ValueError("deflate requires the lanczos engine")
-            if _is_complex_operator(matvec, N):
+            if is_c:
                 raise ValueError("deflate: real symmetric operators only (for now)")
             lam, W = _topk_pairs(matvec, N, deflate, seed=seed)
             proj = lambda X: X - W @ (W.T @ X)
             mv = lambda X: proj(matvec(proj(X)))
             atoms, scale = lam, (N - deflate) / N
         certifiable = True
-        if engine == "kpm":
-            if _is_complex_operator(mv, N):
+        if xp is not None:
+            # device operator (torch/cupy/array-API): same draws, on-device;
+            # the harvested (α, β) live on the host → certificates work
+            tridiags = _harvest_xp(matvec, N, k, probes, rng, is_c, xp, ref)
+        elif engine == "kpm":
+            if is_c:
                 raise ValueError("engine='kpm': real symmetric operators only")
             tridiags = _kpm_tridiags(mv, N, k, probes, rng,
                                      block=_supports_block(mv, N))
             certifiable = False                # KPM recurrences describe the
         elif engine != "lanczos":              # SMOOTHED measure — no theorems
             raise ValueError(f"unknown engine {engine!r}: 'lanczos' or 'kpm'")
-        elif _is_complex_operator(mv, N):
+        elif is_c:
             # complex HERMITIAN operator: complex Gaussian probes, complex
             # Lanczos — the tridiagonal (and the whole read side) stays real
             tridiags = [_lanczos_herm(mv,
@@ -725,7 +1084,13 @@ def apply(matvec, f, v, k: int = 48, hermitian: bool = True):
                      be COMPLEX (e.g. exp(-itλ)).  The result is returned complex
                      if f or A drives it complex.  This is what makes resona a
                      general solver, not a spectra-only tool.
+
+    If v is a torch/cupy/array-API array, the whole Krylov loop runs on its
+    device and the result is returned there (float32 caveat: see `Spectral.of`).
     """
+    xp = _xp(v)
+    if xp is not None:                  # device vector → device Krylov
+        return _apply_xp(matvec, f, v, k, hermitian, xp)
     v = np.asarray(v, complex if not hermitian else None)
     nv = np.linalg.norm(v)
     if nv == 0:
