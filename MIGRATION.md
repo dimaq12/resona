@@ -16,8 +16,9 @@ bit-frozen default paths, same numbers.
 
 ## New surface in 1.4 (no old equivalent)
 
-- `resona.free.r_inverse` / `resona.free.s_inverse` — the missing duals of the
-  R/S-transforms, for spectral design (monotone, bisectable).
+- `resona.lift.r_inverse` / `resona.lift.s_inverse` — the missing duals of the
+  R/S-transforms, for spectral design (monotone window required, bisected to
+  machine tightness; they live beside `r_transform`/`s_transform`).
 - **Error-bar parity**: `density(xs, with_err=True)`, `cumulants(n, with_err=True)`,
   `extreme(with_err=True)`, `wkernel.kappa_w(..., full=True)` — every
   stochastic read now offers its scatter, the same way `trace`/`moment`/

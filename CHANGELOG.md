@@ -3,6 +3,39 @@
 All notable changes to resona.  The discipline throughout: every number below
 is printed by a test or a gallery stand, not asserted by hand.
 
+## [1.4.0] — 2026-06-12
+EPIC3 "the deprecation release" — honesty completion, zero breaks (every old
+name still works; removals happen in 2.0 only).  See MIGRATION.md.
+- **EPISTEMIC PARITY** — the 2.0 north star lands early: every stochastic
+  read now offers its scatter.  `density(xs, with_err=True)`,
+  `cumulants(order, with_err=True)` (nonlinearity propagated by per-probe
+  recomputation, not linearization), `extreme(with_err=True)` (a
+  reproducibility bar, stated as such), `wkernel.kappa_w(..., full=True)`
+  (the whole per-direction distribution — curvature anisotropy).
+- **The trace split**: `s.trace_certified(f, support=)` — one name per
+  return shape; `trace(certified=True)` keeps working through 1.x.
+- **`defect.defect_barycentres`** — the honest canonical name
+  (`spectroscopy` promised a spectrum it does not deliver; it remains as a
+  legacy alias until 2.0).
+- **`resona.synthesize`** — the discoverable verb for `from_measure`
+  (operator construction; both names stay).
+- **`lift.r_inverse` / `lift.s_inverse`** — the missing duals of the R/S
+  transforms for spectral design: monotone-window check + bisection to
+  machine tightness (round-trip < 1e-10 in tests).
+- **The measured retrofits** (EPIC3 Phase 0/1 — every delta measured in a
+  scratch BEFORE the gallery; falsified predictions recorded in
+  .audit/EPIC3_phase0.md): Chern marker via a precomputed Jackson/Chebyshev
+  projector (C = +0.985 at L=20 in seconds; 7× faster at L=12);
+  Heisenberg thermodynamics by deflating −H (ground states become exact
+  atoms: max Z err 19.4% → 0.09% at L=8, 16.3% → 0.67% at L=12); GP log-det
+  deflate=64 (0.84% → 0.53%); Koopman VdP at 4× data (|Δf| = 3e-4, finer
+  than the FFT reference's own 1e-3 bin).
+- **Persona landing pages** (docs/personas/): five half-page doors — quants,
+  physicists, ML, dynamics, numerical analysts — each mapping the persona's
+  first five tasks to five verified calls.
+- 108 tests; full-gallery ratchet: only the four retrofitted stands moved,
+  all by improvement; default paths bit-identical.
+
 ## [1.3.0] — 2026-06-12
 EPIC2 "the defect listens back" — every port stress-tested in the source
 corpus FIRST (FA/revise_stress/STRESS_REPORT.md: 4 of 5 gold survived; the

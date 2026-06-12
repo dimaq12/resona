@@ -181,12 +181,14 @@ def generator_read(P_n, P_2n, t, n, solver="be"):
     return (4.0 * n / t ** 2) * D
 
 
-def spectroscopy(power, bands, coords=None):
+def defect_barycentres(power, bands, coords=None):
     """COMPRESS each band of a defect power distribution to ONE coordinate —
-    its energy barycentre (the BDS read).  Despite the name, this does not
-    return a spectrum: it returns one (location, amplitude) pair per band —
-    that compression is exactly what survives noise where ratio estimators
-    die.
+    its energy barycentre (the BDS read).  One (location, amplitude) pair per
+    band — that compression is exactly what survives noise where ratio
+    estimators die.
+
+    (1.4) This is the canonical name; `spectroscopy` is the legacy alias —
+    it promised a spectrum it does not deliver — and is removed in 2.0.
 
     `power`  : |D̂|² — the defect's energy in the caller's diagonalizing
                basis (resona does NOT choose your basis: you transform).
@@ -219,3 +221,7 @@ def spectroscopy(power, bands, coords=None):
         kbar.append(float((coords[b] * w).sum() / tot))
         signal.append(float(np.sqrt(tot)))
     return np.array(kbar), np.array(signal)
+
+
+#: legacy alias (≤1.3 name) — same function; removed in 2.0 (see MIGRATION.md)
+spectroscopy = defect_barycentres

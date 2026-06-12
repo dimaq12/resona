@@ -41,15 +41,17 @@ matvec = lambda v: A @ v          # your operator, however you can apply it
 | collapse the variance on a spiked operator (Hutch++) | `resona.of(mv, N, deflate=K)` | [reading-spectra](reading-spectra.md) | — |
 | high-resolution density without reorthogonalization | `resona.of(mv, N, k=256, engine="kpm")` | [reading-spectra](reading-spectra.md) | — |
 | get a CERTIFIED bracket (the answer provably inside) | `resona.quadform(mv, "inv", v, certified=True, support=(a,None))` | [precision-and-defects](precision-and-defects.md) | [`certified_logdet.py`](../examples/certified_logdet.py) |
-| certify the k-truncation of a trace estimate | `s.trace("log", certified=True, support=(a,None))` | [precision-and-defects](precision-and-defects.md) | [`certified_logdet.py`](../examples/certified_logdet.py) |
+| certify the k-truncation of a trace estimate | `s.trace_certified("log", support=(a,None))` | [precision-and-defects](precision-and-defects.md) | [`certified_logdet.py`](../examples/certified_logdet.py) |
+| error bars on density / cumulants / extremes | `s.density(xs, with_err=True)` etc. — every stochastic read has one | [reading-spectra](reading-spectra.md) | — |
 | resolve INTERIOR eigenvalues (spectrum slicing) | `s.zoom(a, b)` → polish nodes | [reading-spectra](reading-spectra.md) | [`spectra_to_machine_precision.py`](../examples/spectra_to_machine_precision.py) |
 | check how close a disorder computation is to the critical edge | `resona.subordination.contraction(s, xs, σ²)` → compare to 1 | [composing-operators](composing-operators.md) | — |
 | read the Koopman generator out of a legacy solver's error | `resona.defect.generator_read(P_n, P_2n, t, n)` | [precision-and-defects](precision-and-defects.md) | [`defect_spectroscopy.py`](../examples/defect_spectroscopy.py) |
-| read a band spectrum from the same error (blind-zone-free) | `resona.defect.spectroscopy(power, bands, coords)` | [precision-and-defects](precision-and-defects.md) | [`defect_spectroscopy.py`](../examples/defect_spectroscopy.py) |
+| read per-band barycentres from the same error (blind-zone-free) | `resona.defect.defect_barycentres(power, bands, coords)` | [precision-and-defects](precision-and-defects.md) | [`defect_spectroscopy.py`](../examples/defect_spectroscopy.py) |
 | follow eigenvalues through CROSSINGS along a parameter path | `resona.wkernel.track(A0, Bs, path)` | [inverse-problems](inverse-problems.md) | — |
 | size a safe parameter step (trust region for frozen W) | `resona.wkernel.kappa_w(A0, Bs, k0)` | [inverse-problems](inverse-problems.md) | — |
 | disorder-average a DOS (no realizations) | `resona.subordination.averaged_dos(sA,σ,xs)` | [composing-operators](composing-operators.md) | [`anderson_localization.py`](../examples/anderson_localization.py) |
-| CONSTRUCT an operator with a prescribed spectrum | inverse-CDF levels → `resona.from_measure(levels, 1/N)` | [inverse-problems](inverse-problems.md) | [`spectral_phenomena/operator_synthesis.py`](../examples/spectral_phenomena/operator_synthesis.py) |
+| CONSTRUCT an operator with a prescribed spectrum | inverse-CDF levels → `resona.synthesize(levels, 1/N)` | [inverse-problems](inverse-problems.md) | [`spectral_phenomena/operator_synthesis.py`](../examples/spectral_phenomena/operator_synthesis.py) |
+| invert an R/S-transform for spectral design | `resona.lift.r_inverse(s, target)` | [composing-operators](composing-operators.md) | — |
 | probe a NON-HERMITIAN operator (Markov, Koopman, damping) | `resona.cloud(mv, N)` → `.radius() .abscissa() .nodes` | [reading-spectra](reading-spectra.md) | [`science/koopman_dynamics.py`](../examples/science/koopman_dynamics.py) |
 | read a topological invariant matrix-free | P = `apply(H, step, v)` chains → Chern marker | [solving-and-evolving](solving-and-evolving.md) | [`quantum/chern_from_noise.py`](../examples/quantum/chern_from_noise.py) |
 | turn a TIME SERIES into an operator | `mv, rmv, r = resona.lift.koopman(snapshots)` | [lifting-nonlinear](lifting-nonlinear.md) | [`science/koopman_dynamics.py`](../examples/science/koopman_dynamics.py) |

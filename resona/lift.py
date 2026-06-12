@@ -81,6 +81,52 @@ def s_transform(s, w):
     return float(out[0]) if np.isscalar(w) else out
 
 
+def r_inverse(s, value, w_max=1.0, n=2001):
+    """w such that R(w) = value — the dual of `r_transform`, for spectral
+    DESIGN (choose the coordinate w that realizes a target R).  Scalar or
+    array `value`.
+
+    Samples R on (0, w_max], requires monotonicity there (raises otherwise —
+    the inverse is ill-posed; shrink `w_max`), then bisects to machine
+    tightness.  R is analytic with R'(0) = κ₂ > 0, so a monotone window
+    always exists near 0."""
+    ws = np.linspace(w_max / n, w_max, n)
+    rs = r_transform(s, ws)
+    return _monotone_invert(lambda w: r_transform(s, w), ws, rs, value,
+                            "R", w_max)
+
+
+def s_inverse(s, value, w_max=1.0, n=2001):
+    """w such that S(w) = value — the dual of `s_transform` (positive
+    spectra), same contract as `r_inverse`."""
+    ws = np.linspace(w_max / n, w_max, n)
+    rs = s_transform(s, ws)
+    return _monotone_invert(lambda w: s_transform(s, w), ws, rs, value,
+                            "S", w_max)
+
+
+def _monotone_invert(fn, ws, rs, value, name, w_max):
+    d = np.diff(rs)
+    if not (np.all(d > 0) or np.all(d < 0)):
+        raise ValueError(f"{name} is not monotone on (0, {w_max}]: the "
+                         "inverse is ill-posed there — shrink w_max")
+    sign = 1.0 if d[0] > 0 else -1.0
+    v = np.atleast_1d(np.asarray(value, float))
+    lo_r, hi_r = min(rs[0], rs[-1]), max(rs[0], rs[-1])
+    if v.min() < lo_r or v.max() > hi_r:
+        raise ValueError(f"value outside {name}'s range [{lo_r:.6g}, "
+                         f"{hi_r:.6g}] on (0, {w_max}]")
+    idx = np.searchsorted(sign * rs, sign * v).clip(1, len(ws) - 1)
+    lo, hi = ws[idx - 1].astype(float), ws[idx].astype(float)
+    for _ in range(60):                                     # machine-tight
+        mid = 0.5 * (lo + hi)
+        below = sign * np.atleast_1d(fn(mid)) < sign * v
+        lo = np.where(below, mid, lo)
+        hi = np.where(below, hi, mid)
+    out = 0.5 * (lo + hi)
+    return float(out[0]) if np.isscalar(value) else out
+
+
 def free_convolution(sA, sB, order=6):
     """Moments of  A ⊞ B  (free additive convolution) from the two spectra ALONE.
 

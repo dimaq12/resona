@@ -111,7 +111,7 @@ def track(A0, perturbations, path, steps=1):
     return np.array(lams), V
 
 
-def kappa_w(A0, perturbations, k0, eps=1e-5, probes=8, seed=0):
+def kappa_w(A0, perturbations, k0, eps=1e-5, probes=8, seed=0, full=False):
     """κ_W — the local curvature of the spectral-flow kernel:
     max over random unit directions of ‖W(k₀+εu) − W(k₀)‖_F / ε.
 
@@ -122,6 +122,11 @@ def kappa_w(A0, perturbations, k0, eps=1e-5, probes=8, seed=0):
     across fresh seeds; cost follows the PATH LENGTH, not the local
     curvature.  Use κ_W to size a trust region for `track`/`design` steps,
     never as a difficulty oracle.
+
+    ``full=True`` → (max, values): the whole per-direction distribution —
+    its spread is the anisotropy of W's curvature (a tight cluster means one
+    trust radius fits all directions; a heavy tail means direction-dependent
+    step sizing).
 
     Family: wkernel owns W; this is W's local Lipschitz read.
     """
@@ -135,8 +140,8 @@ def kappa_w(A0, perturbations, k0, eps=1e-5, probes=8, seed=0):
         return np.einsum('ni,mni->im', V, Bstack @ V)
 
     W0 = W_at(k0)
-    out = 0.0
+    vals = []
     for _ in range(probes):
         u = rng.standard_normal(len(k0)); u /= np.linalg.norm(u)
-        out = max(out, float(np.linalg.norm(W_at(k0 + eps * u) - W0) / eps))
-    return out
+        vals.append(float(np.linalg.norm(W_at(k0 + eps * u) - W0) / eps))
+    return (max(vals), np.array(vals)) if full else max(vals)

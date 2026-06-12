@@ -831,6 +831,8 @@ class Spectral:
         plus ``support=(a, b)`` with the needed endpoint) → (lo, hi), the
         Gauss–Radau bracket (Golub–Meurant) of the K-TRUNCATION error: the
         fully-converged SLQ value of these same probes provably lies inside.
+        (1.4+: prefer `trace_certified` — one name per return shape; this
+        spelling remains through 1.x and is removed in 2.0.)
         It does NOT certify the Monte-Carlo probe scatter — that is a separate
         error source, reported by ``with_err``; the two are stated apart by
         design.  For an unconditional certificate of a probe-free quantity,
@@ -875,19 +877,69 @@ class Spectral:
         stderr = float(np.std(ests, ddof=1) / np.sqrt(p))
         return total, stderr
 
+    def trace_certified(self, f, support=None):
+        """(lo, hi) — the Gauss–Radau bracket of Tr f(A)'s k-truncation.
+
+        The 1.4+ canonical name for ``trace(f, certified=True, support=…)``
+        (one name per return shape: `trace` returns a number, this returns
+        the bracket).  f must be a family name ('log', 'inv', 'sqrt',
+        'exp'); see `trace` for the full epistemics."""
+        return self.trace(f, certified=True, support=support)
+
     def moment(self, p: int, with_err: bool = False):
         """Tr(A^p).  ``with_err=True`` → (value, stderr), see `trace`."""
         return self.trace(lambda x: x ** p, with_err=with_err)
 
-    def density(self, xs, eta: float = 0.1) -> np.ndarray:
-        """Density of states ρ(x), Lorentzian-broadened by `eta`."""
-        xs = np.atleast_1d(np.asarray(xs, float))
-        return (self.weights[None, :] * (eta / np.pi)
-                / ((xs[:, None] - self.nodes[None, :]) ** 2 + eta ** 2)).sum(1)
+    def _probe_blocks(self):
+        """(sizes, n_atoms) — the per-probe node-block structure, validated."""
+        if not self.probe_sizes or len(self.probe_sizes) < 2:
+            raise ValueError("error bars need the probe structure from "
+                             "Spectral.of with probes >= 2")
+        used = int(np.sum(self.probe_sizes))
+        return list(self.probe_sizes), len(self.nodes) - used
 
-    def extreme(self) -> tuple[float, float]:
-        """Extreme eigenvalues (Lanczos resolves these first / most reliably)."""
-        return float(self.nodes.min()), float(self.nodes.max())
+    def density(self, xs, eta: float = 0.1, with_err: bool = False):
+        """Density of states ρ(x), Lorentzian-broadened by `eta`.
+
+        ``with_err=True`` → (rho, stderr): the per-x standard error from the
+        independent-probe scatter (same epistemics as `trace`; deflate atoms
+        are exact and contribute no scatter)."""
+        xs = np.atleast_1d(np.asarray(xs, float))
+        ker = (self.weights[None, :] * (eta / np.pi)
+               / ((xs[:, None] - self.nodes[None, :]) ** 2 + eta ** 2))
+        rho = ker.sum(1)
+        if not with_err:
+            return rho
+        sizes, _ = self._probe_blocks()
+        p = len(sizes)
+        ests, i = [], 0
+        for sz in sizes:
+            ests.append(p * ker[:, i:i + sz].sum(1))
+            i += sz
+        atom = ker[:, i:].sum(1)                              # exact, zero scatter
+        ests = np.stack([e + atom for e in ests])
+        return rho, np.std(ests, axis=0, ddof=1) / np.sqrt(p)
+
+    def extreme(self, with_err: bool = False):
+        """Extreme eigenvalues (Lanczos resolves these first / most reliably).
+
+        ``with_err=True`` → ((lo, hi), (lo_err, hi_err)): the standard error
+        of the per-probe extreme reads — a REPRODUCIBILITY bar (how much the
+        read moves probe to probe), not a certified enclosure."""
+        lo, hi = float(self.nodes.min()), float(self.nodes.max())
+        if not with_err:
+            return lo, hi
+        sizes, _ = self._probe_blocks()
+        p = len(sizes)
+        atoms = self.nodes[int(np.sum(sizes)):]
+        mins, maxs, i = [], [], 0
+        for sz in sizes:
+            blk = self.nodes[i:i + sz]
+            cand = np.concatenate([blk, atoms]) if len(atoms) else blk
+            mins.append(float(cand.min())); maxs.append(float(cand.max()))
+            i += sz
+        return (lo, hi), (float(np.std(mins, ddof=1) / np.sqrt(p)),
+                          float(np.std(maxs, ddof=1) / np.sqrt(p)))
 
     # ── TRANSFORMS (the lifted coordinates, read off the measure) ─────────────
     def cauchy(self, z):
@@ -911,12 +963,31 @@ class Spectral:
     r_transform = r          # full-name aliases (same methods; pick what reads
     s_transform = s          # better at the call site)
 
-    def cumulants(self, order: int = 6):
+    def cumulants(self, order: int = 6, with_err: bool = False):
         """Free cumulants κ_1..κ_order — the canonical coordinates in which
-        composition is ADDITION (κ_n(A⊞B) = κ_n(A) + κ_n(B))."""
+        composition is ADDITION (κ_n(A⊞B) = κ_n(A) + κ_n(B)).
+
+        ``with_err=True`` → (kappa, stderr): per-cumulant standard error from
+        the independent-probe scatter (each probe's moments → its cumulants;
+        the nonlinearity is propagated by recomputation, not linearization)."""
         from .free import free_cumulants
         m = [self.moment(p) / self.N for p in range(1, order + 1)]
-        return free_cumulants(m)
+        kappa = free_cumulants(m)
+        if not with_err:
+            return kappa
+        sizes, _ = self._probe_blocks()
+        p = len(sizes)
+        per_probe = []
+        for r in range(p):
+            m_r = []
+            for q in range(1, order + 1):
+                vals = self.weights * (self.nodes ** q)
+                i = int(np.sum(sizes[:r]))
+                blk = float(np.sum(vals[i:i + sizes[r]])) * p
+                atom = float(np.sum(vals[int(np.sum(sizes)):]))
+                m_r.append(blk + atom)
+            per_probe.append(free_cumulants(m_r))
+        return kappa, np.std(np.stack(per_probe), axis=0, ddof=1) / np.sqrt(p)
 
     # ── FLOW / DISORDER (the resolvent fixed point, vectorized) ───────────────
     def flow(self, t, xs, eta: float = 1e-3, g0=None):
@@ -1233,6 +1304,13 @@ def from_measure(nodes, weights, k=None):
     """
     lam = np.asarray(nodes, float); w = np.asarray(weights, float)
     return _lanczos(lambda x: lam * x, np.sqrt(np.clip(w, 0.0, None)), k or len(lam))
+
+
+def synthesize(nodes, weights, k=None):
+    """CONSTRUCT an operator with the prescribed spectral measure — the
+    discoverable verb (1.4+) for `from_measure` (the same function; both
+    names stay, `from_measure` remains the precise synonym)."""
+    return from_measure(nodes, weights, k=k)
 
 
 def from_eigenbasis(eigenvalues, eigenvectors):
