@@ -726,15 +726,40 @@ def apply(matvec, f, v, k: int = 48, hermitian: bool = True):
                      if f or A drives it complex.  This is what makes resona a
                      general solver, not a spectra-only tool.
     """
-    v = np.asarray(v, complex if not hermitian else float)
+    v = np.asarray(v, complex if not hermitian else None)
     nv = np.linalg.norm(v)
     if nv == 0:
         return v.copy()
     N = len(v)
 
+    if hermitian and (np.iscomplexobj(v) or _is_complex_operator(matvec, N)):
+        # complex HERMITIAN: complex Lanczos, REAL tridiagonal — f(θ) real-
+        # valued on a real spectrum, the result reconstructed in C^N.  (For
+        # complex f on a Hermitian operator — e^{-iHt} — pass hermitian=True
+        # too: θ are real, f(θ) complex is fine.)
+        vc = np.asarray(v, complex)
+        Vb = np.zeros((N, k), complex)
+        al = np.zeros(k); be = np.zeros(k)
+        q = vc / nv; Vb[:, 0] = q
+        qprev = np.zeros(N, complex); b = 0.0; m = k
+        for j in range(k):
+            w = np.asarray(matvec(q), complex) - b * qprev
+            al[j] = float(np.real(np.vdot(q, w)))
+            w = w - al[j] * q
+            w -= Vb[:, :j + 1] @ (Vb[:, :j + 1].conj().T @ w)
+            if j < k - 1:
+                b = float(np.linalg.norm(w))
+                if b < 1e-12:
+                    m = j + 1; break
+                be[j] = b; qprev, q = q, w / b; Vb[:, j + 1] = q
+        T = np.diag(al[:m]) + np.diag(be[:m - 1], 1) + np.diag(be[:m - 1], -1)
+        theta, S = np.linalg.eigh(T)
+        return nv * (Vb[:, :m] @ (S @ (np.asarray(f(theta)) * S[0, :])))
+
     if hermitian:                                       # ── Lanczos (symmetric) ──
+        v = np.asarray(v, float)
         V = np.zeros((N, k)); al = np.zeros(k); be = np.zeros(k)
-        q = v.real / nv; V[:, 0] = q; qprev = np.zeros(N); b = 0.0; m = k
+        q = v / nv; V[:, 0] = q; qprev = np.zeros(N); b = 0.0; m = k
         for j in range(k):
             w = matvec(q) - b * qprev
             al[j] = float(q @ w)

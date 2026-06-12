@@ -203,3 +203,34 @@ def carleman_gf(p, n, func):
         x = np.asarray(x)
         return int(np.sum(coeffs * np.prod(x[None, :] ** exps, axis=1)) % p)
     return coeffs, evaluate
+
+
+def koopman(snapshots, rank=None, rtol=1e-10):
+    """DATA → OPERATOR: the action of the Koopman/DMD propagator, never formed.
+
+    `snapshots`: (n_features, n_times) trajectory matrix of a dynamical
+    system.  One thin SVD of X₀ = snapshots[:, :-1] gives the least-squares
+    propagator  K = X₁ X₀⁺  in its rank-r POD basis:  K̃ = UᵀX₁ V Σ⁻¹  (r×r).
+    Returns (matvec, rmatvec, r) — the action of K̃ and K̃ᵀ on R^r — so the
+    WHOLE library falls onto data: `cloud(matvec, r)` reads the dynamics'
+    frequencies/damping, `cost.is_extractable` grades it, etc.
+
+    THE LIFT VIEW: for nonlinear dynamics, feed lifted observables (delay
+    stacks, monomials) as rows — Koopman is the data-driven Carleman.
+
+    HONEST LIMITS: the rank cutoff (singular values below rtol·σ₁ dropped) is
+    REPORTED via r — a hard low-rank truncation, not a free lunch; short or
+    noisy data make K̃ a least-squares fit, not the true propagator; continuous
+    frequencies follow as log(λ)/Δt with the usual aliasing caveats.
+    """
+    X = np.asarray(snapshots, float)
+    X0, X1 = X[:, :-1], X[:, 1:]
+    U, sv, Vt = np.linalg.svd(X0, full_matrices=False)
+    r = int(np.sum(sv > rtol * sv[0]))
+    if rank is not None:
+        r = min(r, int(rank))
+    U, sv, Vt = U[:, :r], sv[:r], Vt[:r]
+    M = U.T @ X1 @ Vt.T / sv[None, :]          # r×r reduced propagator (formed:
+    mv = lambda v: M @ v                       # r is DATA-rank, tiny by design)
+    rmv = lambda v: M.T @ v
+    return mv, rmv, r

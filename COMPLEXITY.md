@@ -26,6 +26,9 @@ slopes (measured `time ∝ N^s` on tridiagonal operators, N=64…512) are in **b
 | `defect.sigma_min(matvec,z)` | `O(k·C)` (2N realified Lanczos) | matvec (+rmatvec) | ✓ | dense path: one SVD `O(N³)`, exact |
 | `defect.pseudospectrum_radius` | `O(iters·sigma_min)` | matvec (+rmatvec) | ✓ | log-bisection on the bloom, ~60 σ_min calls |
 | `cost.level_spacing_ratio(λ)` | `O(N log N)` | eigenvalues | — | 3 lines; resolve symmetry sectors first |
+| `cloud(mv,N,k,p)` | `O(p·k·C + p·k²·N)` (Arnoldi+DGKS) | matvec | ✓ | complex Ritz cloud ⊂ numerical range; reads are transient-growth dials |
+| `lift.koopman(X)` | one thin SVD `O(n·T·min)` | snapshot matrix | — | returns the r×r reduced action; r = reported data rank |
+| `thermal.expect/correlator` | `O(probes·k·C)` / `·len(ts)·2` | matvec | ✓ | typicality error ~1/√D_eff, stderr reported |
 
 `✓*` = matrix-free given the spectrum, which `of` reads matrix-free.
 

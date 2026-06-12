@@ -76,6 +76,9 @@ each entry verified in `tests/` and `examples/` against dense ground truth:
 | `s.zoom(a, b)` | Chebyshev spectrum slicing: interior eigenvalues at full k-resolution | interior to 4e-16 of span |
 | `of(deflate=K)` | Hutch++ at the measure level: exact top-K atoms + complement probes | variance −63× (Tr A²), −724× (Tr eᴬ) |
 | `of(engine="kpm")` | Chebyshev/Jackson harvest, no reorthogonalization | 2.7× at k=256, same object out |
+| `cloud(mv, N)` | non-Hermitian Arnoldi cloud; abscissa = NUMERICAL abscissa (transient growth) | Markov gap to 1e-3; ω−α gap measured |
+| `lift.koopman(X)` | data → the DMD/Koopman propagator's action (one thin SVD) | rotation eigenvalues to 1e-6 |
+| `thermal.correlator` | typicality: ⟨O(t)O⟩_β with two Krylov evolutions per point | vs dense to 0.014 (200 probes) |
 
 🔧 **Have a task right now?** The **[cookbook](https://github.com/dimaq12/resona/blob/main/docs/README.md)**: find your task
 in the "I want to…" table, copy the recipe.
