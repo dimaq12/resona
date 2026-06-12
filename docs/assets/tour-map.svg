@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 170" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="line" gradientUnits="userSpaceOnUse" x1="40" y1="85" x2="1020" y2="85">
+      <stop offset="0" stop-color="#3b82f6"/>
+      <stop offset="0.55" stop-color="#8b5cf6"/>
+      <stop offset="1" stop-color="#ef4444"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="40" y="82" width="980" height="6" rx="3" fill="url(#line)"/>
+
+  <!-- stops: x positions every ~108px -->
+  <!-- 0 matvec -->
+  <circle cx="45"  cy="85" r="9" fill="#fff" stroke="#3b82f6" stroke-width="4"/>
+  <text x="45"  y="55" text-anchor="middle" font-size="13" fill="#3b82f6" font-weight="bold">0</text>
+  <text x="45"  y="120" text-anchor="middle" font-size="12" fill="#666">matvec</text>
+
+  <!-- 1 listen -->
+  <circle cx="153" cy="85" r="9" fill="#fff" stroke="#4f7df6" stroke-width="4"/>
+  <text x="153" y="55" text-anchor="middle" font-size="13" fill="#4f7df6" font-weight="bold">1</text>
+  <text x="153" y="120" text-anchor="middle" font-size="12" fill="#666">listen: of()</text>
+
+  <!-- 2 trace -->
+  <circle cx="261" cy="85" r="9" fill="#fff" stroke="#5f78f5" stroke-width="4"/>
+  <text x="261" y="55" text-anchor="middle" font-size="13" fill="#5f78f5" font-weight="bold">2</text>
+  <text x="261" y="120" text-anchor="middle" font-size="12" fill="#666">ask: trace(f)</text>
+
+  <!-- 3 dials -->
+  <circle cx="369" cy="85" r="9" fill="#fff" stroke="#6f72f4" stroke-width="4"/>
+  <text x="369" y="55" text-anchor="middle" font-size="13" fill="#6f72f4" font-weight="bold">3</text>
+  <text x="369" y="120" text-anchor="middle" font-size="12" fill="#666">how hard? (&#934;1)</text>
+
+  <!-- 4 compose -->
+  <circle cx="477" cy="85" r="9" fill="#fff" stroke="#7f6cf3" stroke-width="4"/>
+  <text x="477" y="55" text-anchor="middle" font-size="13" fill="#7f6cf3" font-weight="bold">4</text>
+  <text x="477" y="120" text-anchor="middle" font-size="12" fill="#666">add: s + t</text>
+
+  <!-- 5 apply -->
+  <circle cx="585" cy="85" r="9" fill="#fff" stroke="#8b5cf6" stroke-width="4"/>
+  <text x="585" y="55" text-anchor="middle" font-size="13" fill="#8b5cf6" font-weight="bold">5</text>
+  <text x="585" y="120" text-anchor="middle" font-size="12" fill="#666">use: f(A)&#183;v</text>
+
+  <!-- 6 lift -->
+  <circle cx="693" cy="85" r="9" fill="#fff" stroke="#a155e8" stroke-width="4"/>
+  <text x="693" y="55" text-anchor="middle" font-size="13" fill="#a155e8" font-weight="bold">6</text>
+  <text x="693" y="120" text-anchor="middle" font-size="12" fill="#666">lift nonlinear</text>
+
+  <!-- 7 synthesis -->
+  <circle cx="801" cy="85" r="9" fill="#fff" stroke="#c14ed9" stroke-width="4"/>
+  <text x="801" y="55" text-anchor="middle" font-size="13" fill="#c14ed9" font-weight="bold">7</text>
+  <text x="801" y="120" text-anchor="middle" font-size="12" fill="#666">synthesize ops</text>
+
+  <!-- 8 precision -->
+  <circle cx="909" cy="85" r="9" fill="#fff" stroke="#e04a96" stroke-width="4"/>
+  <text x="909" y="55" text-anchor="middle" font-size="13" fill="#e04a96" font-weight="bold">8</text>
+  <text x="909" y="120" text-anchor="middle" font-size="12" fill="#666">when numbers lie</text>
+
+  <!-- 9 walls (terminus) -->
+  <rect x="1006" y="71" width="28" height="28" rx="6" fill="#fff" stroke="#ef4444" stroke-width="4"/>
+  <text x="1020" y="55" text-anchor="middle" font-size="13" fill="#ef4444" font-weight="bold">9</text>
+  <text x="1008" y="120" text-anchor="middle" font-size="12" fill="#666">the walls</text>
+
+  <text x="530" y="158" text-anchor="middle" font-size="12" fill="#999" font-style="italic">the tour &#8212; ten stops, plain words &#8594; one-line theorem &#8594; runnable code</text>
+</svg>

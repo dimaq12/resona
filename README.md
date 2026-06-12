@@ -1,5 +1,7 @@
 # resona — the FFT of operators
 
+<p align="center"><img src="docs/assets/hero.png" alt="resona — the FFT of operators: probe, compose, read" width="820"></p>
+
 > `fft(x)` takes a **signal** to the basis where convolution becomes pointwise
 > multiply. `resona.of(A)` takes an **operator** (anything that can multiply a
 > vector) to the representation where composition becomes addition — and from
@@ -46,6 +48,8 @@ Every line above is matrix-free: the cost is the matvec, not `O(N³)`.
 🚶 **New to operators / numerics?** Take **[the tour](docs/tour.md)** — ten
 stops from "what is a matvec" to designing your own operators, every stop in
 plain words first, the math second.
+
+<p align="center"><a href="docs/tour.md"><img src="docs/assets/tour-map.svg" alt="the tour: ten stops" width="900"></a></p>
 
 🎓 **Mathematician?** The library is a dictionary of theorems made executable —
 each entry verified in `tests/` and `examples/` against dense ground truth:

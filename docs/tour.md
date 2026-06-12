@@ -4,6 +4,8 @@ Every stop: plain words first (🚶), then the one-line mathematical truth (🎓
 then runnable code. No stop needs the previous one's math — only its code.
 All snippets run as-is after `pip install resona`.
 
+<p align="center"><img src="assets/tour-map.svg" alt="ten stops: matvec → listen → ask → dials → compose → apply → lift → synthesize → precision → walls" width="950"></p>
+
 ```python
 import numpy as np, resona
 rng = np.random.default_rng(0)
