@@ -214,8 +214,8 @@ def defect_barycentres(power, bands, coords=None):
     band — that compression is exactly what survives noise where ratio
     estimators die.
 
-    (1.4) This is the canonical name; `spectroscopy` is the legacy alias —
-    it promised a spectrum it does not deliver — and is removed in 2.0.
+    (Named `spectroscopy` before 2.0 — that name promised a spectrum it
+    does not deliver; see MIGRATION.md.)
 
     `power`  : |D̂|² — the defect's energy in the caller's diagonalizing
                basis (resona does NOT choose your basis: you transform).
@@ -248,7 +248,3 @@ def defect_barycentres(power, bands, coords=None):
         kbar.append(float((coords[b] * w).sum() / tot))
         signal.append(float(np.sqrt(tot)))
     return np.array(kbar), np.array(signal)
-
-
-#: legacy alias (≤1.3 name) — same function; removed in 2.0 (see MIGRATION.md)
-spectroscopy = defect_barycentres

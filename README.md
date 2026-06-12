@@ -80,7 +80,7 @@ each entry verified in `tests/` and `examples/` against dense ground truth:
 | `lift.koopman(X)` | data → the DMD/Koopman propagator's action (one thin SVD) | rotation eigenvalues to 1e-6 |
 | `thermal.correlator` | typicality: ⟨O(t)O⟩_β with two Krylov evolutions per point | vs dense to 0.014 (200 probes) |
 | `defect.generator_read` | the solver's defect IS the Koopman generator (BE: (t²/4n)·A²e^{−tA}u₀) | O(n⁻²) exact, incl. defective Grcar κ=∞ |
-| `defect.spectroscopy` | per-band barycentre of the defect power (BDS) — blind-zone-free | 35/35 PDEs; stable at 5% noise where the ratio dies at 1e-5 |
+| `defect.defect_barycentres` | per-band barycentre of the defect power (BDS) — blind-zone-free | 35/35 PDEs; stable at 5% noise where the ratio dies at 1e-5 |
 | `wkernel.track` | the spectral-flow line integral, crossing-safe by eigenvector continuation | 8.9e-15 vs 3.3 (sorted) at a crossing |
 | `subordination.contraction` | \|T′\| of the Pastur fixed point — the edge-of-chaos read | →0.9998 at the band edge, iters 90→12k |
 

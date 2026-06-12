@@ -14,14 +14,15 @@ def _spd(N=400, seed=3):
 
 
 # ── the trace split ───────────────────────────────────────────────────────────
-def test_trace_certified_equals_old_spelling():
+def test_trace_certified_bracket():
     A = _spd()
     s = Spectral.of(lambda v: A @ v, A.shape[0], k=48, probes=8)
-    new = s.trace_certified("log", support=(1e-6, None))
-    old = s.trace("log", certified=True, support=(1e-6, None))
-    assert new == old
-    lo, hi = new
+    lo, hi = s.trace_certified("log", support=(1e-6, None))
     assert lo <= hi
+    truth = np.linalg.slogdet(A)[1]
+    # the bracket certifies k-truncation of THESE probes; it should sit near
+    # the plain trace read, and be ordered
+    assert abs(0.5 * (lo + hi) - s.trace("log")) < 1e-6 * max(1.0, abs(truth))
 
 
 # ── error-bar parity: density ─────────────────────────────────────────────────
@@ -88,14 +89,15 @@ def test_kappa_w_full():
 
 
 # ── renames / aliases ─────────────────────────────────────────────────────────
-def test_defect_barycentres_alias():
+def test_defect_barycentres():
     power = np.array([0.0, 4.0, 0.0, 0.0, 1.0, 1.0])
     bands = [np.array([0, 1, 2]), np.array([3, 4, 5])]
     k1, s1 = resona.defect.defect_barycentres(power, bands)
-    k2, s2 = resona.defect.spectroscopy(power, bands)
-    assert np.array_equal(k1, k2) and np.array_equal(s1, s2)
     assert k1[0] == 1.0                              # all energy at index 1
     assert s1[0] == 2.0
+    # 2.0: the legacy names are GONE
+    assert not hasattr(resona.defect, "spectroscopy")
+    assert not hasattr(resona.cost, "phi1")
 
 
 def test_synthesize_is_from_measure():
@@ -136,5 +138,10 @@ def test_r_inverse_out_of_range_raises():
         resona.lift.r_inverse(s, 1e9)
 
 
-def test_version():
-    assert resona.__version__ == "1.4.0"
+def test_version_matches_pyproject():
+    # the REAL invariant (the one the sed/ENOSPC incident violated): the
+    # package version and pyproject must agree — never a hardcoded literal
+    import pathlib, re
+    toml = pathlib.Path(__file__).resolve().parents[1] / "pyproject.toml"
+    v = re.search(r'version = "([^"]+)"', toml.read_text()).group(1)
+    assert resona.__version__ == v

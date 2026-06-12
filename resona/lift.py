@@ -37,7 +37,12 @@ def r_transform(s, w):
     """R-transform R(w) = G⁻¹(w) − 1/w (scalar or array w>0). R_{A⊞B}=R_A+R_B.
 
     Vectorized bisection on the monotone G (110 halvings → tighter than brentq),
-    all query points solved at once."""
+    all query points solved at once.
+
+    PRECISION NOTE: the root z* ≈ 1/w is found in absolute coordinates and
+    1/w subtracted — for w ≪ 1 this cancels ~|log₁₀ w| digits (R(1e-10)
+    carries ~6 significant digits, not 16).  w ≤ 0 returns R(0) = mean (the
+    analytic limit at 0⁺; strictly negative w is outside the domain)."""
     nodes, wt = _nw(s); wt = wt / wt.sum(); lam = float(nodes.max())
     wq = np.atleast_1d(np.asarray(w, float))
     out = np.empty(len(wq))

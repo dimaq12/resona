@@ -55,7 +55,7 @@ def test_deflate_certified_bracket():
     mv = lambda v: A @ v
     s_lo = Spectral.of(mv, N, k=12, probes=6, deflate=8)
     s_hi = Spectral.of(mv, N, k=64, probes=6, deflate=8)
-    lo, hi = s_lo.trace("log", certified=True, support=(0.5, None))
+    lo, hi = s_lo.trace_certified("log", support=(0.5, None))
     converged = s_hi.trace(np.log)
     assert lo <= converged <= hi
 
@@ -104,4 +104,4 @@ def test_engine_guards():
         Spectral.of(lambda v: A @ v, N, engine="fft")
     s = Spectral.of(lambda v: A @ v, N, k=8, probes=2, engine="kpm")
     with pytest.raises(ValueError):
-        s.trace("log", certified=True, support=(0.5, None))  # no theorems on KPM
+        s.trace_certified("log", support=(0.5, None))  # no theorems on KPM

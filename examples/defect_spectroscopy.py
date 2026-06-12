@@ -14,7 +14,7 @@ resona reads recover both — from an UNMODIFIED solver treated as a black box:
          the float32 noise floor shown, and Crank–Nicolson honestly REFUSED
          (the constant is solver-specific; measured deviation O(1)).
 
-  ACT 2  `defect.spectroscopy(power, bands, coords)`: the defect's power
+  ACT 2  `defect.defect_barycentres(power, bands, coords)`: the defect's power
          spectrum, read per frequency band by its BARYCENTRE — the
          blind-zone-free estimator (BDS).  The punchline is ROBUSTNESS:
          under snapshot noise the barycentre holds where the classical
@@ -32,7 +32,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 from numpy.fft import fft
 from scipy.linalg import expm
-from resona.defect import generator_read, spectroscopy, richardson_limit
+from resona.defect import generator_read, defect_barycentres, richardson_limit
 
 rng = np.random.default_rng(0)
 
@@ -103,7 +103,7 @@ if __name__ == "__main__":
         r2 = np.random.default_rng(1)
         nz = lambda v: v + eps * np.linalg.norm(v) / np.sqrt(Nf) * r2.standard_normal(Nf)
         power = np.abs(fft(nz(Pn) - nz(P2n))) ** 2
-        kb, sig = spectroscopy(power, bands, coords=kmag)
+        kb, sig = defect_barycentres(power, bands, coords=kmag)
         ki = [int(round(x)) if np.isfinite(x) else None for x in kb[:6]]
         if base_k is None:
             base_k = ki

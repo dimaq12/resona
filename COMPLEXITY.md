@@ -18,7 +18,7 @@ slopes (measured `time ∝ N^s` on tridiagonal operators, N=64…512) are in **b
 | `of`/`apply` with torch/cupy/array-API matvecs | unchanged, on the user's device | matvec | ✓ | invisible dispatch on the array namespace of the matvec's output (`of`) / the input vector (`apply`); vectors never leave the device — only (α,β) and the k×k eigh visit the host.  COVERAGE: `of(engine="lanczos", deflate=0)` (real & complex-Hermitian; certificates work — the harvested (α,β) are host-side) and `apply` (incl. the complex-Hermitian branch; a backend that rejects complex vectors on a real operator is handled by linearity, 2 matvecs/step); `engine="kpm"` / `deflate` **raise** on device operators, `zoom` / `quadform` are host-only for now.  The numpy path is bit-identical with the same matvec count (measured; the dispatch check is ~0.4 µs against ~170 ms per `of`).  fp32 HONESTY: torch's default float32 caps SLQ at single precision — measured 3e-8 rel. err on Tr A², expect 2–3 digits for stiff f (log-det near a small λ_min); build the operator on float64 tensors for ~1e-12 agreement with numpy (measured, torch CPU).  GPU speedup not yet measured (this dev box has no CUDA); torch **CPU** float64 is ~2.8× slower than numpy BLAS at N=2000 — the device path pays off only when the operator already lives on an accelerator |
 | `local_spectrum / local_density` | `O(k·C + k²·N)` | matvec, one probe | ✓ | one Lanczos from a chosen v |
 | `moment / trace / extreme / effective_rank / density` | `O(p·k)` | the nodes/weights | ✓ | reads of's output |
-| `trace(certified=True)` / `quadform(certified=True)` | `O(p·k³)` (Radau eigh per probe) | stored (α,β) | ✓ | rigorous Gauss–Radau brackets, zero extra matvecs |
+| `trace_certified(...)` / `quadform(certified=True)` | `O(p·k³)` (Radau eigh per probe) | stored (α,β) | ✓ | rigorous Gauss–Radau brackets, zero extra matvecs |
 | `Spectral.zoom(a,b,degree)` | `O(p·(degree+k)·C)` | matvec | ✓ | Chebyshev slicing; transition band ~span·π/degree |
 | `free.freeness_defect / cross_moment` | `O(p·|word|·C)` | matvec | ✓ | Hutchinson |
 | `subordination.pastur` | `O(iters·N)` per z | spectrum (nodes,w) | ✓* | scalar fixed point |
@@ -28,7 +28,7 @@ slopes (measured `time ∝ N^s` on tridiagonal operators, N=64…512) are in **b
 | `defect.pseudospectrum_radius` | `O(iters·sigma_min)` | matvec (+rmatvec) | ✓ | log-bisection on the bloom, ~60 σ_min calls |
 | `cost.level_spacing_ratio(λ)` | `O(N log N)` | eigenvalues | — | 3 lines; resolve symmetry sectors first |
 | `defect.generator_read` | `O(N)` (a scaled difference) | two solver runs | ✓ | BE-specific constant; refuses CN (measured O(1) deviation) |
-| `defect.spectroscopy` | `O(Σ\|band\|)` | the defect power in the caller's basis | ✓ | barycentre read; ±1-bin rounding; ~5× the ratio method's matvecs upstream |
+| `defect.defect_barycentres` | `O(Σ\|band\|)` | the defect power in the caller's basis | ✓ | barycentre read; ±1-bin rounding; ~5× the ratio method's matvecs upstream |
 | `wkernel.track` | `O(steps·N³)` (one eigh per midpoint) | dense family (A0, B_j) | ✗ | crossing-safe; ~100× frozen-W accuracy per eigh; 44–302× fewer eigh than FD continuation |
 | `wkernel.kappa_w` | `O(probes·N³)` | dense family | ✗ | frozen-W ACCURACY dial (ρ=0.93); NOT a cost dial (blind ρ≈0.05) |
 | `subordination.contraction` | one `pastur_grid` + one G′ eval | spectrum | ✓* | pure read; critical window narrows with σ² (measured) |

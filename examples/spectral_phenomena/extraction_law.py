@@ -53,5 +53,5 @@ if __name__ == "__main__":
     print("  Saturating lift-rank ⇒ a finite chart linearizes the singularity ⇒ the")
     print("  answer is extractable (most apparent walls are just coordinates).  Rank")
     print("  that grows with the window ⇒ Σ* — a genuine wall, no classical shortcut.")
-    print("  Φ₁ = resona.cost.phi1 is the one-number global version of the same dial.")
+    print("  Φ₁ = s.effective_rank() is the one-number global version of the same dial.")
     print("=" * 72)

@@ -66,7 +66,7 @@ def test_trace_certified_brackets_quadrature():
     mv = lambda x: A @ x
     s_lo = Spectral.of(mv, N, k=12, probes=8)
     s_hi = Spectral.of(mv, N, k=64, probes=8)      # same seed → same probes
-    lo, hi = s_lo.trace("log", certified=True, support=(0.45, None))
+    lo, hi = s_lo.trace_certified("log", support=(0.45, None))
     converged = s_hi.trace(np.log)                 # quadrature error ~1e-13
     assert lo <= converged <= hi
     # the bracket does NOT certify Monte-Carlo scatter — documented contract;
@@ -78,9 +78,9 @@ def test_trace_certified_needs_known_family():
     A = _psd(N)
     s = Spectral.of(lambda x: A @ x, N, k=8, probes=2)
     with pytest.raises(ValueError):
-        s.trace(np.log, certified=True)            # callable: signs unknown
+        s.trace_certified(np.log)                  # callable: signs unknown
     with pytest.raises(ValueError):
-        s.trace("log", certified=True, support=(2.0, None))  # a inside spectrum? no:
+        s.trace_certified("log", support=(2.0, None))  # a inside spectrum? no:
         # support left endpoint must be positive and below spectrum — here it
         # is ABOVE λmin≈0.5, the certificate must refuse
 
@@ -135,8 +135,8 @@ def test_polish_guards():
     N = 200
     A = _psd(N)
     s = Spectral.of(lambda v: A @ v, N, k=16, probes=4)
-    with _pt.raises(ValueError):
-        s.trace("log", certified=True, with_err=True, support=(0.4, None))
+    with _pt.raises(TypeError):
+        s.trace("log", certified=True, support=(0.4, None))   # 2.0: kwarg GONE
     with _pt.raises(ValueError):
         s.zoom(2.0, 1.0)                       # a >= b refused
     val, err = s.effective_rank(with_err=True)

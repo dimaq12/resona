@@ -79,27 +79,47 @@ def _lanczos_block(matvec, V0, k):
     return [(al[i, :m[i]], be[i, :m[i] - 1]) for i in range(p)]
 
 
+def _lanczos_core(matvec, q, k, cplx):
+    """THE Lanczos loop (full reorthogonalization), consolidated in 2.0 —
+    one implementation behind `_lanczos`, `_lanczos_herm` AND `apply`'s
+    Hermitian branches (formerly three inline copies; the gallery ratchet
+    is the bit-parity certificate of the merge).
+
+    `q` must be UNIT (callers own the normalization — that is what keeps
+    each call site bit-identical to its pre-merge inline loop).
+    Returns (alpha[:m], beta[:m−1], V[:, :m])."""
+    N = len(q)
+    V = np.zeros((N, k), complex if cplx else float)
+    al = np.zeros(k); be = np.zeros(k)
+    V[:, 0] = q
+    qprev = np.zeros(N, complex if cplx else float); b = 0.0; m = k
+    for j in range(k):
+        if cplx:
+            w = np.asarray(matvec(q), complex) - b * qprev
+            al[j] = float(np.real(np.vdot(q, w)))
+        else:
+            w = matvec(q) - b * qprev
+            al[j] = float(q @ w)
+        w = w - al[j] * q
+        w -= V[:, :j + 1] @ ((V[:, :j + 1].conj().T if cplx else V[:, :j + 1].T) @ w)
+        if j < k - 1:
+            b = float(np.linalg.norm(w))
+            if b < 1e-12:
+                m = j + 1
+                break
+            be[j] = b
+            qprev, q = q, w / b
+            V[:, j + 1] = q
+    return al[:m], be[:m - 1], V[:, :m]
+
+
 def _lanczos(matvec, v0, k):
     """k-step Lanczos with full reorthogonalization. Returns (alpha, beta)."""
     xp = _xp(v0)
     if xp is not None:                  # device vector → device recurrence
         return _lanczos_xp(matvec, v0, k, xp)
-    N = len(v0)
-    V = np.zeros((N, k)); alpha = np.zeros(k); beta = np.zeros(max(k - 1, 0))
-    q = v0 / np.linalg.norm(v0); V[:, 0] = q; qprev = np.zeros(N); b = 0.0
-    for j in range(k):
-        w = matvec(q) - b * qprev
-        alpha[j] = float(q @ w)
-        w = w - alpha[j] * q
-        w -= V[:, :j + 1] @ (V[:, :j + 1].T @ w)
-        if j < k - 1:
-            b = float(np.linalg.norm(w))
-            beta[j] = b
-            if b < 1e-12:
-                return alpha[:j + 1], beta[:j]
-            qprev, q = q, w / b
-            V[:, j + 1] = q
-    return alpha, beta
+    al, be, _ = _lanczos_core(matvec, v0 / np.linalg.norm(v0), k, False)
+    return al, be
 
 
 def _lanczos_herm(matvec, v0, k):
@@ -112,24 +132,9 @@ def _lanczos_herm(matvec, v0, k):
     xp = _xp(v0)
     if xp is not None:                  # device vector → device recurrence
         return _lanczos_xp(matvec, xp.as_complex(v0), k, xp)
-    N = len(v0)
-    V = np.zeros((N, k), complex)
-    alpha = np.zeros(k); beta = np.zeros(max(k - 1, 0))
-    q = np.asarray(v0, complex); q = q / np.linalg.norm(q)
-    V[:, 0] = q; qprev = np.zeros(N, complex); b = 0.0
-    for j in range(k):
-        w = np.asarray(matvec(q), complex) - b * qprev
-        alpha[j] = float(np.real(np.vdot(q, w)))
-        w = w - alpha[j] * q
-        w -= V[:, :j + 1] @ (V[:, :j + 1].conj().T @ w)
-        if j < k - 1:
-            b = float(np.linalg.norm(w))
-            beta[j] = b
-            if b < 1e-12:
-                return alpha[:j + 1], beta[:j]
-            qprev, q = q, w / b
-            V[:, j + 1] = q
-    return alpha, beta
+    q = np.asarray(v0, complex)
+    al, be, _ = _lanczos_core(matvec, q / np.linalg.norm(q), k, True)
+    return al, be
 
 
 def _topk_pairs(matvec, N, K, extra=None, seed=0):
@@ -845,50 +850,21 @@ class Spectral:
         return Spectral(nodes, weights, matvec=None, N=self.N)
 
     # ── READ (inverse transform: any spectral functional) ─────────────────────
-    def trace(self, f, with_err: bool = False, certified: bool = False,
-              support=None):
+    def trace(self, f, with_err: bool = False):
         """Tr f(A) = N · E[f(λ)] = N · Σ w·f(node).
 
         f may be a CALLABLE (``s.trace(np.log)``) or a family NAME
-        (``s.trace("log")`` — required for certificates, identical otherwise).
+        (``s.trace("log")`` — identical here; family names matter for
+        `trace_certified`, where derivative signs must be theorems).
 
         ``with_err=True`` → (value, stderr): the standard error of the
         stochastic estimate, read from the scatter of the independent probes
         (free — no extra matvecs).  The honest number, with its honest ±.
-
-        ``certified=True`` (f as a family name: 'log', 'inv', 'sqrt', 'exp';
-        plus ``support=(a, b)`` with the needed endpoint) → (lo, hi), the
-        Gauss–Radau bracket (Golub–Meurant) of the K-TRUNCATION error: the
-        fully-converged SLQ value of these same probes provably lies inside.
-        (1.4+: prefer `trace_certified` — one name per return shape; this
-        spelling remains through 1.x and is removed in 2.0.)
-        It does NOT certify the Monte-Carlo probe scatter — that is a separate
-        error source, reported by ``with_err``; the two are stated apart by
-        design.  For an unconditional certificate of a probe-free quantity,
-        see `quadform`.
+        For the PROVABLE k-truncation bracket see `trace_certified` (2.0:
+        the old ``trace(certified=True)`` spelling is removed — one name
+        per return shape).
         """
-        f, fam = _resolve_f(f)
-        if certified and with_err:
-            raise ValueError("certified=True brackets the k-truncation; "
-                             "with_err=True reads the Monte-Carlo scatter — "
-                             "two different error sources: ask separately")
-        if certified:
-            if fam is None:
-                raise ValueError("certified=True needs f as a family name "
-                                 f"({list(_FAMS)}), not a callable")
-            if not self._tridiags:
-                raise ValueError("certificates need the probe recurrences: "
-                                 "build this object with Spectral.of "
-                                 "(lanczos engine — KPM's recurrences describe "
-                                 "the smoothed measure, no theorems there)")
-            los, his = zip(*(_bracket(al, be, fam, support)
-                             for al, be in self._tridiags))
-            n_at = getattr(self, "_n_atoms", 0)
-            scale = getattr(self, "_slq_scale", 1.0)
-            atom_part = (float(self.N) * float(np.sum(
-                self.weights[-n_at:] * f(self.nodes[-n_at:]))) if n_at else 0.0)
-            return (float(self.N) * scale * float(np.mean(los)) + atom_part,
-                    float(self.N) * scale * float(np.mean(his)) + atom_part)
+        f, _ = _resolve_f(f)
         vals = self.weights * f(self.nodes)
         total = float(self.N) * float(np.sum(vals))
         if not with_err:
@@ -907,13 +883,37 @@ class Spectral:
         return total, stderr
 
     def trace_certified(self, f, support=None):
-        """(lo, hi) — the Gauss–Radau bracket of Tr f(A)'s k-truncation.
+        """(lo, hi) — the Gauss–Radau bracket (Golub–Meurant) of Tr f(A)'s
+        K-TRUNCATION error: the fully-converged SLQ value of these same
+        probes provably lies inside.
 
-        The 1.4+ canonical name for ``trace(f, certified=True, support=…)``
-        (one name per return shape: `trace` returns a number, this returns
-        the bracket).  f must be a family name ('log', 'inv', 'sqrt',
-        'exp'); see `trace` for the full epistemics."""
-        return self.trace(f, certified=True, support=support)
+        f must be a family NAME ('log', 'inv', 'sqrt', 'exp') — derivative
+        signs must be known for the bracket to be a theorem — plus
+        ``support=(a, b)`` with the needed endpoint (a ≤ λ_min for
+        log/inv/sqrt, b ≥ λ_max for exp; often known structurally, e.g. a
+        jitter).  It does NOT certify the Monte-Carlo probe scatter — that
+        is a separate error source, reported by ``trace(f, with_err=True)``;
+        the two are stated apart by design.  For an unconditional
+        certificate of a probe-free quantity, see `quadform`."""
+        f, fam = _resolve_f(f)
+        if fam is None:
+            raise ValueError("trace_certified needs f as a family name "
+                             f"({list(_FAMS)}), not a callable — derivative "
+                             "signs must be known for the bracket to be a "
+                             "theorem")
+        if not self._tridiags:
+            raise ValueError("certificates need the probe recurrences: "
+                             "build this object with Spectral.of "
+                             "(lanczos engine — KPM's recurrences describe "
+                             "the smoothed measure, no theorems there)")
+        los, his = zip(*(_bracket(al, be, fam, support)
+                         for al, be in self._tridiags))
+        n_at = getattr(self, "_n_atoms", 0)
+        scale = getattr(self, "_slq_scale", 1.0)
+        atom_part = (float(self.N) * float(np.sum(
+            self.weights[-n_at:] * f(self.nodes[-n_at:]))) if n_at else 0.0)
+        return (float(self.N) * scale * float(np.mean(los)) + atom_part,
+                float(self.N) * scale * float(np.mean(his)) + atom_part)
 
     def moment(self, p: int, with_err: bool = False):
         """Tr(A^p).  ``with_err=True`` → (value, stderr), see `trace`."""
@@ -951,6 +951,10 @@ class Spectral:
 
     def extreme(self, with_err: bool = False):
         """Extreme eigenvalues (Lanczos resolves these first / most reliably).
+
+        Always an INNER estimate — Ritz values lie in the spectral hull, so
+        deterministically lo ≥ λ_min and hi ≤ λ_max (Rayleigh–Ritz); the
+        approach is from inside as k grows.
 
         ``with_err=True`` → ((lo, hi), (lo_err, hi_err)): the standard error
         of the per-probe extreme reads — a REPRODUCIBILITY bar (how much the
@@ -1237,43 +1241,23 @@ def apply(matvec, f, v, k: int = 48, hermitian: bool = True):
         # complex HERMITIAN: complex Lanczos, REAL tridiagonal — f(θ) real-
         # valued on a real spectrum, the result reconstructed in C^N.  (For
         # complex f on a Hermitian operator — e^{-iHt} — pass hermitian=True
-        # too: θ are real, f(θ) complex is fine.)
+        # too: θ are real, f(θ) complex is fine.)  One _lanczos_core call —
+        # the 2.0 consolidation; q = v/nv preserved so the merge is
+        # bit-identical to the former inline loop.
         vc = np.asarray(v, complex)
-        Vb = np.zeros((N, k), complex)
-        al = np.zeros(k); be = np.zeros(k)
-        q = vc / nv; Vb[:, 0] = q
-        qprev = np.zeros(N, complex); b = 0.0; m = k
-        for j in range(k):
-            w = np.asarray(matvec(q), complex) - b * qprev
-            al[j] = float(np.real(np.vdot(q, w)))
-            w = w - al[j] * q
-            w -= Vb[:, :j + 1] @ (Vb[:, :j + 1].conj().T @ w)
-            if j < k - 1:
-                b = float(np.linalg.norm(w))
-                if b < 1e-12:
-                    m = j + 1; break
-                be[j] = b; qprev, q = q, w / b; Vb[:, j + 1] = q
-        T = np.diag(al[:m]) + np.diag(be[:m - 1], 1) + np.diag(be[:m - 1], -1)
+        al, be, Vb = _lanczos_core(matvec, vc / nv, k, True)
+        m = len(al)
+        T = np.diag(al) + np.diag(be[:m - 1], 1) + np.diag(be[:m - 1], -1)
         theta, S = np.linalg.eigh(T)
-        return nv * (Vb[:, :m] @ (S @ (np.asarray(f(theta)) * S[0, :])))
+        return nv * (Vb @ (S @ (np.asarray(f(theta)) * S[0, :])))
 
     if hermitian:                                       # ── Lanczos (symmetric) ──
         v = np.asarray(v, float)
-        V = np.zeros((N, k)); al = np.zeros(k); be = np.zeros(k)
-        q = v / nv; V[:, 0] = q; qprev = np.zeros(N); b = 0.0; m = k
-        for j in range(k):
-            w = matvec(q) - b * qprev
-            al[j] = float(q @ w)
-            w = w - al[j] * q
-            w -= V[:, :j + 1] @ (V[:, :j + 1].T @ w)    # full reorth
-            if j < k - 1:
-                b = float(np.linalg.norm(w))
-                if b < 1e-12:
-                    m = j + 1; break
-                be[j] = b; qprev, q = q, w / b; V[:, j + 1] = q
-        T = np.diag(al[:m]) + np.diag(be[:m - 1], 1) + np.diag(be[:m - 1], -1)
+        al, be, V = _lanczos_core(matvec, v / nv, k, False)
+        m = len(al)
+        T = np.diag(al) + np.diag(be[:m - 1], 1) + np.diag(be[:m - 1], -1)
         theta, S = np.linalg.eigh(T)
-        return nv * (V[:, :m] @ (S @ (np.asarray(f(theta), float) * S[0, :])))
+        return nv * (V @ (S @ (np.asarray(f(theta), float) * S[0, :])))
 
     # ── Arnoldi (general / non-symmetric, possibly complex) ──
     Q = np.zeros((N, k + 1), complex); H = np.zeros((k + 1, k), complex)
@@ -1375,9 +1359,12 @@ def from_measure(nodes, weights, k=None):
     Jacobi (tridiagonal) operator whose e₀-measure it is, as (α, β) — diagonal and
     POSITIVE off-diagonal.
 
-    Run Lanczos on diag(nodes) from the start vector √weights — the exact inverse
-    of `Spectral.of`'s matrix→measure direction (the Stieltjes / Gauss-quadrature
-    construction; `of` ∘ `from_measure` = identity on the (α,β)).  Recovers a
+    Run Lanczos on diag(nodes) from the start vector √weights — the exact
+    inverse of the e₀-MEASURE read (the Stieltjes / Gauss-quadrature
+    construction: `from_measure(*local_spectrum(J, e0))` recovers (α, β)).
+    `Spectral.of`'s random-probe average recovers the NODES of J but pushes
+    weights toward 1/N — it is not the inverse for non-uniform weights;
+    `local_spectrum` is.  Recovers a
     well-conditioned / smooth operator to ~machine precision; the long recurrence
     is genuinely ill-conditioned when the weights span many orders of magnitude
     (sharp operators) — the inverse spectral problem's intrinsic difficulty.

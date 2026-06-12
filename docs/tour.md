@@ -233,7 +233,7 @@ lo_hi = resona.quadform(lambda u: A2 @ u, "inv", b, certified=True,
                         support=(0.5, None))
 print(lo_hi)                       # vᵀA₂⁻¹v is INSIDE — guaranteed
 s2 = resona.of(lambda u: A2 @ u, 2000)
-print(s2.trace("log", certified=True, support=(0.5, None)))  # truncation bracket
+print(s2.trace_certified("log", support=(0.5, None)))  # truncation bracket
 ```
 
 🎓 Golub–Meurant: Gauss quadrature of the Lanczos tridiagonal is one-sided

@@ -59,6 +59,11 @@ def averaged_dos(spectral, sigma, xs, eta=1e-3, g0=None):
 
     Closed form via the Pastur fixed point — no disorder realizations, no eig.
     Vectorized over the whole grid (see `pastur_grid`).
+
+    BRANCH NOTE: the physical solution has Im g ≤ 0 in the upper half-plane;
+    the ρ = max(−Im g/π, 0) clip below assumes the damped iteration stayed on
+    that branch.  Near edges (where `contraction` → 1) verify convergence —
+    a wrong-branch g would read as silent ρ = 0, not as an error.
     """
     g = pastur_grid(spectral, np.asarray(xs, float) + 1j * eta, sigma ** 2, g0=g0)
     return np.maximum(-g.imag / np.pi, 0.0)

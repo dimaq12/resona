@@ -68,7 +68,7 @@ if __name__ == "__main__":
     print(f"\n    {'k':>4} {'quadrature bracket':>26} {'width':>9}   {'± MC scatter':>12}")
     for k in (8, 16, 32):
         s = resona.of(mv, N, k=k, probes=16)
-        lo, hi = s.trace("log", certified=True, support=(sig2, None))
+        lo, hi = s.trace_certified("log", support=(sig2, None))
         _, se = s.trace(np.log, with_err=True)
         print(f"    {k:>4} [{lo:10.4f}, {hi:10.4f}] {hi - lo:9.2e}   {se:12.3f}")
     print(f"    → the k-truncation is CERTIFIED (bracket → 0 exponentially);")

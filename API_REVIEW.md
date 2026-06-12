@@ -74,6 +74,32 @@ principled.  The surface holds — what follows is sanding, not surgery.
 - **`resona.cloud` (function) shadowing the submodule** (taxonomy): the
   function IS the intended public face; `import resona.cloud` still works.
 
+## THE 2.0 RE-PASS (EPIC3 Phase 5, 2026-06-13) — fresh personas, post-break
+
+- **Newcomer: 10/10** task-guess rate (was 8/10 in 1.3) — all three findings
+  were doc nits, fixed same-day (synthesize recipe now copy-paste-safe with
+  the (α, β) return shape stated; quadform row labelled as the quadratic form).
+- **Mathematician:** "mathematical hygiene unusually high"; fixed same-day:
+  the false `of ∘ from_measure = identity` claim (the true inverse is
+  `local_spectrum`'s e₀-measure), r_transform's small-w cancellation note,
+  extreme()'s Rayleigh–Ritz inner-bias statement, freeness_defect's
+  resolution floor, averaged_dos's branch note.
+- **Maintainer:** all 2.0 removals verified; COMPLEXITY.md stale row and
+  cost.py leaked scipy names fixed same-day.
+
+**PROPOSE-2.1 bin** (structural, deferred deliberately):
+1. `with_err` parity for the LIFTED reads — boxplus / cauchy / r / s /
+   free_convolution (the per-probe recipe already exists in `cumulants`).
+2. `freeness_defect` / `cross_moment` → (value, stderr) returns.
+3. Pastur wrong-branch guard (warn or heavier damping instead of the
+   silent ρ=0 clip) — behavior change, wants its own tests.
+4. `r_transform` shifted-variable bisection (u = z − 1/w) to kill the
+   small-w cancellation rather than document it.
+5. The `resona.cloud` function-shadows-module accident: decide (rename the
+   module to `_cloud` or live with it) — works today only because `Cloud`
+   is re-exported at top level.
+6. `__all__` coverage for the 8 modules that define their surface implicitly.
+
 ## Scoreboard
 
 - Newcomer task-guess rate: **8/10** before docs.

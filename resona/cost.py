@@ -18,15 +18,7 @@ a genuine wall (structureless, e.g. aˣ mod N).  This is the dial that says
 dequantizable-vs-quantum, easy-vs-hard, from the signal itself.
 """
 import numpy as np
-from scipy.linalg import hankel, svdvals
-
-
-def phi1(spectral):
-    """Thin ALIAS of ``Spectral.effective_rank()`` — prefer the method.
-
-    Kept for the theory-side vocabulary (the Extraction Law speaks of Φ₁);
-    adds nothing computationally."""
-    return spectral.effective_rank()
+from scipy.linalg import hankel as _hankel, svdvals as _svdvals
 
 
 def lift_rank(signal, k=60):
@@ -34,8 +26,8 @@ def lift_rank(signal, k=60):
     = (Σσ²)²/Σσ⁴ of the Hankel singular values — the size of the linearizing chart."""
     s = np.asarray(signal, float)
     s = (s - s.mean()) / (s.std() + 1e-12)
-    H = hankel(s[:k], s[k - 1:2 * k - 1])
-    s2 = svdvals(H) ** 2
+    H = _hankel(s[:k], s[k - 1:2 * k - 1])
+    s2 = _svdvals(H) ** 2
     return float(s2.sum() ** 2 / (s2 ** 2).sum())
 
 

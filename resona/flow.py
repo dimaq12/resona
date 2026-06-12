@@ -25,9 +25,16 @@ def burgers_density(spectral, t, xs, eta=1e-3, g0=None):
     return _sub.averaged_dos(spectral, np.sqrt(max(t, 0.0)), xs, eta=eta, g0=g0)
 
 
-def shock_time(spectral, t_max=4.0, n_t=160, n_x=400, eta=2e-3, thresh=0.02):
+def shock_time(spectral, t_max=4.0, eta=2e-3):
     """The band-merger / shock time t_c: the smallest t at which the spectral gap
-    fills in under the free heat flow (two bands → one).  Returns t_c or None."""
+    fills in under the free heat flow (two bands → one).  Returns t_c or None.
+
+    Two dials (the 2.0 diet): `t_max` — how far to flow; `eta` — resolvent
+    broadening (smaller = sharper gap detection, slower fixed point).  Grid
+    resolution and the fill threshold are internal (160 × 400, 2% of peak):
+    knobs nobody should have had to turn.
+    """
+    n_t, n_x, thresh = 160, 400, 0.02
     nodes, _ = _sub._nw(spectral)
     lo, hi = float(nodes.min()), float(nodes.max())
     mid = 0.5 * (lo + hi)

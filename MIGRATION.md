@@ -1,9 +1,10 @@
 # Migrating to resona 1.4 / 2.0
 
-resona 1.4 is the **deprecation release**: every new name below already works,
-every old name still works and its docstring points forward.  resona 2.0
-removes the old names.  Nothing about the math changes — same engines, same
-bit-frozen default paths, same numbers.
+resona 1.4 was the **deprecation release**: every new name already worked,
+every old name still worked.  **resona 2.0 (out now) removes the old names.**
+Nothing about the math changes — same engines, same bit-frozen default paths,
+same numbers (the 2.0 Lanczos consolidation inside `apply` is certified
+bit-identical by the full example-gallery diff).
 
 ## Renames & splits
 
@@ -24,13 +25,14 @@ bit-frozen default paths, same numbers.
   stochastic read now offers its scatter, the same way `trace`/`moment`/
   `effective_rank` already did.
 
-## Removed in 2.0 (and only in 2.0)
+## Removed in 2.0 (done)
 
-- `trace(certified=True)` (use `trace_certified`)
-- `defect.spectroscopy` (use `defect.defect_barycentres`)
-- `cost.phi1` (use `effective_rank`)
-- `shock_time`'s four expert knobs (the two that matter remain; the four were
-  never exercised outside their own tests)
+- `trace(certified=True)` — use `trace_certified(f, support=…)`; calling
+  `trace` with the old kwarg now raises `TypeError`
+- `defect.spectroscopy` — use `defect.defect_barycentres`
+- `cost.phi1` — use `s.effective_rank()`
+- `shock_time`'s four expert knobs (`n_t`, `n_x`, `thresh` are now internal
+  constants 160/400/2%; the dials that remain: `t_max`, `eta`)
 
 ## Mechanical sweep
 

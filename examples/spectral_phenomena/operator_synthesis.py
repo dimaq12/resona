@@ -117,7 +117,7 @@ if __name__ == "__main__":
     print(f"     ordering one and checking the other fails by design; see ACT 1 vs 2)")
 
     # ── ACT 3: turn the free-heat knob, re-realize on the fly ────────────────
-    tc = s.shock_time(t_max=2.0, n_t=60, n_x=240, eta=4e-3)
+    tc = s.shock_time(t_max=2.0, eta=4e-3)
     print(f"\n  ACT 3 — close the gap with the free-heat knob (no realizations, Pastur):")
     print(f"    band-merger (shock) time of the ordered spectrum: t_c = {tc:.3f}")
     mids = np.array([2.5])

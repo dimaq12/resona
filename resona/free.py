@@ -86,6 +86,11 @@ def freeness_defect(Amv, Bmv, N, word="ABAB", probes=24, seed=0):
 
     ≈0 (O(1/√N)) ⇔ A and B are free ⇔ their response composes exactly; O(1) marks
     the non-closable residue (correlated eigenbases).  τ(X)=Tr(X)/N via Hutchinson.
+
+    RESOLUTION NOTE: the Hutchinson stderr at default probes is itself
+    O(1/√N) — the read reliably separates O(1) (non-free) from small, but
+    cannot resolve structure AT the O(1/√N) scale; raise `probes` to push
+    the floor down.
     """
     rng = np.random.default_rng(seed)
     a = _htrace(Amv, N, probes, rng) / N

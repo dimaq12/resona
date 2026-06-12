@@ -3,6 +3,23 @@
 All notable changes to resona.  The discipline throughout: every number below
 is printed by a test or a gallery stand, not asserted by hand.
 
+## [2.0.0] — 2026-06-13
+EPIC3 Phase 5 — THE BREAK (owner-approved).  The deprecation cycle closes:
+old names removed, one consolidation, zero math changes.
+- **Removed**: `trace(certified=True)` (→ `trace_certified`),
+  `defect.spectroscopy` (→ `defect_barycentres`), `cost.phi1`
+  (→ `effective_rank`), `shock_time`'s grid/threshold knobs (now internal;
+  dials: `t_max`, `eta`).  See MIGRATION.md — every removal has a 1.4+ name
+  that has been live since 2026-06-12.
+- **The Lanczos consolidation**: `apply`'s two inline Hermitian Krylov loops
+  and `_lanczos`/`_lanczos_herm` now share ONE `_lanczos_core` (callers own
+  the start-vector normalization, which keeps every call site bit-identical
+  to its pre-merge loop).  Parity certificate: the full example gallery
+  diffs clean against the 1.5 baseline (timing lines only).
+- CI fix: the version test now asserts `__version__` == pyproject (the real
+  invariant) instead of a hardcoded literal that broke on every release.
+- Gallery and tests migrated to the 2.0 names; 117 tests.
+
 ## [1.5.0] — 2026-06-12
 EPIC3 Phase 3 "the doors" — three interop/capability sockets, no new math
 surface beyond them, boundary contract intact.

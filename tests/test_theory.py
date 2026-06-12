@@ -251,7 +251,7 @@ def test_generator_read_refuses_cn():
 
 
 def test_spectroscopy_barycentre_and_noise():
-    from resona.defect import spectroscopy
+    from resona.defect import defect_barycentres
     rng = np.random.default_rng(0)
     Nf = 256
     k = np.fft.fftfreq(Nf, 1.0 / Nf)
@@ -261,11 +261,11 @@ def test_spectroscopy_barycentre_and_noise():
     power[np.abs(kmag - 3) < 0.5] = 4.0
     power[np.abs(kmag - 24) < 0.5] = 9.0
     bands = [(kmag >= 2 ** j) & (kmag <= 2 ** (j + 1) - 1) for j in range(6)]
-    kb, sig = spectroscopy(power, bands, coords=kmag)
+    kb, sig = defect_barycentres(power, bands, coords=kmag)
     assert abs(kb[1] - 3.0) < 1e-12                  # band j=1 holds mode 3
     assert abs(kb[4] - 24.0) < 1e-12                 # band j=4 holds mode 24
     # 5% noise: barycentre moves by less than one bin
-    kb2, _ = spectroscopy(power + 0.05 * power.max() * rng.random(Nf),
+    kb2, _ = defect_barycentres(power + 0.05 * power.max() * rng.random(Nf),
                           bands, coords=kmag)
     assert abs(kb2[1] - 3.0) < 1.0 and abs(kb2[4] - 24.0) < 1.0
     # empty band → nan + zero signal, no crash
