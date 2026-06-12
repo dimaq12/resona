@@ -25,6 +25,7 @@ matvec = lambda v: A @ v          # your operator, however you can apply it
 | get the spectrum of `A+B` without forming it | `(sA + sB).extreme()` | [composing-operators](composing-operators.md) | [`killer_tasks.py`](../examples/killer_tasks.py) |
 | compose two spectra you measured separately | `resona.lift.free_convolution(sA,sB)` | [composing-operators](composing-operators.md) | [`spectral_phenomena/free_convolution_flow.py`](../examples/spectral_phenomena/free_convolution_flow.py) |
 | disorder-average a DOS (no realizations) | `resona.subordination.averaged_dos(sA,σ,xs)` | [composing-operators](composing-operators.md) | [`anderson_localization.py`](../examples/anderson_localization.py) |
+| CONSTRUCT an operator with a prescribed spectrum | inverse-CDF levels → `resona.from_measure(levels, 1/N)` | [inverse-problems](inverse-problems.md) | [`spectral_phenomena/operator_synthesis.py`](../examples/spectral_phenomena/operator_synthesis.py) |
 | recover the operator from its spectrum | `resona.from_eigenbasis(λ,V)` / `from_measure(λ,w)` | [inverse-problems](inverse-problems.md) | [`inverse_spectral.py`](../examples/inverse_spectral.py) |
 | design parameters to hit a target spectrum | `resona.wkernel.design(W, Δλ, reg=…)` | [inverse-problems](inverse-problems.md) | [`graphs/inverse_graph_design.py`](../examples/graphs/inverse_graph_design.py) |
 | linearize a nonlinear ODE / logic function | `resona.lift.carleman_scalar / carleman_gf` | [lifting-nonlinear](lifting-nonlinear.md) | [`logic/`](../examples/logic/) |

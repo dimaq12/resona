@@ -56,6 +56,7 @@ python3 examples/<dir>/<name>.py
 |------|------|--------|
 | 🎯 `defect_sort.py` | the defect IS the sorting operator (+ its pseudospectrum) | **0 mismatches** vs np.sort; bloom ε^{1/q} exact |
 | 🎯 `nonnormal_convergence.py` | GMRES follows the PSEUDOspectrum, not the spectrum | same spectrum: 14 iters vs stall; σ_min 1e-9 |
+| 🎯 `operator_synthesis.py` | SYNTHESIZE operators: design a measure (bands, ⊞, flow) → realize a tridiagonal matvec | eig = order to **5.6e-15**; gap dip 0.054; two materials from one knob |
 | 🎯 `universal_solver.py` | precompute the response field → instant solves (harvest) | 10,000 solves, **2.6e-15** residual |
 | `arithmetic_manifold.py` | 12 bit-ops self-cluster by spectral fingerprint | silhouette 0.40 (partial, honest) |
 | 🎯 `affine_flow.py` | exact exp(dt·J) flow for stiff/non-normal ODEs (`apply`) | accuracy 38–141× BE (timing caveat) |
