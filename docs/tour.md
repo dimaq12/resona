@@ -220,6 +220,31 @@ iterations vs a stall. Guide: [precision-and-defects](precision-and-defects.md).
 
 ---
 
+## Stop 8½ — when you need to be SURE (certificates)
+
+🚶 Estimates come with error bars; brackets come with theorems.  For the
+money functions (log, 1/x, √, exp) resona can return an interval that the
+true answer PROVABLY lies in — and for quadratic forms (a GP posterior
+variance!) that certificate is unconditional:
+
+```python
+A2 = A + 0.5*np.eye(2000)                              # spectrum ≥ 0.5, known
+lo_hi = resona.quadform(lambda u: A2 @ u, "inv", b, certified=True,
+                        support=(0.5, None))
+print(lo_hi)                       # vᵀA₂⁻¹v is INSIDE — guaranteed
+s2 = resona.of(lambda u: A2 @ u, 2000)
+print(s2.trace("log", certified=True, support=(0.5, None)))  # truncation bracket
+```
+
+🎓 Golub–Meurant: Gauss quadrature of the Lanczos tridiagonal is one-sided
+for f with sign-definite high derivatives; Gauss–Radau with a pinned endpoint
+is one-sided the other way.  `trace` certificates cover the k-truncation
+(Monte-Carlo scatter stays with `with_err` — separated by design);
+`quadform` has no probes, so its bracket is a theorem.  Stand:
+`examples/certified_logdet.py` — GP variance certified, width 1.5e-1 → 3.8e-4.
+
+---
+
 ## Stop 9 — the walls (what resona will tell you it cannot do)
 
 🚶 The best feature: before you burn compute, the dials say which of four

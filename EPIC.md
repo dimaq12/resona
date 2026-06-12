@@ -239,3 +239,11 @@ with the library better than before it started.
 fp32+defect-correction engine (research first → `theory/`), Lindbladians,
 β-ensemble sampler, operator-valued free probability, prime-trace formula in
 Jacobi coordinates (FRONTIER §5 open question), eta invariant / spectral flow.
+
+**Parked DURING the epic (honesty log):**
+- the spectral form factor |Tr Uᵗ|² via the SLQ measure FAILED its honesty
+  probe (corr 0.45 vs dense at L=10): the quadrature measure does not carry
+  eigenvalue PAIR correlations at fluctuation scale — SFF needs either exact
+  spectra or filtered-typicality estimators (future work, not faked).
+  Replaced in Phase E by `thermal_response.py` (S(ω) by typicality, which
+  the machinery does support honestly).

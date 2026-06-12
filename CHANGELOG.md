@@ -3,10 +3,35 @@
 All notable changes to resona.  The discipline throughout: every number below
 is printed by a test or a gallery stand, not asserted by hand.
 
-## [Unreleased — 1.2.0 epic]
-See [EPIC.md](EPIC.md): certified Gauss–Radau trace brackets, spectral zoom,
-deflated probing (Hutch++ at the measure level), KPM engine, invisible GPU via
-array-API, `cloud` (non-Hermitian), `lift.koopman`, `thermal`, the jaw gallery.
+## [1.2.0] — 2026-06-12
+The epic (see [EPIC.md](EPIC.md)) — three contracts held throughout: zero new
+top-level verbs, the metric ratchet (full-gallery diff at every phase, zero
+regressions), pre-registered honest limits.
+- **Certificates**: `s.trace(f, certified=True, support=)` → Gauss–Radau
+  brackets of the k-truncation (Golub–Meurant); `resona.quadform(...,
+  certified=True)` — quadratic forms with UNCONDITIONAL brackets (GP
+  posterior variance with a proof; width 1.5e-1 → 3.8e-4 as k = 8 → 24).
+- **`s.zoom(a, b)`** — Chebyshev spectrum slicing: interior eigenvalues with
+  no dense seed (4e-16 of the span after polish).
+- **`of(deflate=K)`** — Hutch++ at the measure level: exact top-K atoms +
+  complement probes; variance −63× (Tr A²), −724× (Tr eᴬ), honest ~1× on log.
+- **`of(engine="kpm")`** — Chebyshev/Jackson harvest, no reorthogonalization;
+  2.7× at k=256, same `Spectral` out; no certificates (smoothed measure).
+- **Invisible GPU**: array-API dispatch in the Krylov cores — torch/cupy
+  matvecs run on-device with zero new API; numpy path bit-identical.
+- **`resona.cloud`** — the honest non-Hermitian sibling (Arnoldi+DGKS;
+  `abscissa()` reads the NUMERICAL abscissa — the transient-growth dial).
+- **`lift.koopman`** — data → the Koopman/DMD propagator's action (one SVD).
+- **`resona.thermal`** — typicality: ⟨O⟩_β, C(t), S(ω); incremental stepping
+  (O(T) evolutions; 29m48s → 2m30s on the L=13 stand).
+- **`apply`** gains the complex-Hermitian Lanczos path (vs expm to 1e-9).
+- Jaw gallery: `chern_from_noise` (a topological INTEGER from Krylov chains;
+  trivial phase 0.0000 exact), `isospectral_drums` (Kac executable),
+  `koopman_dynamics` (odd-harmonic ladder to 7e-4 vs FFT; the chaos wall),
+  `thermal_response`, `certified_logdet`.
+- Honest parking: the SLQ-measure spectral form factor failed its honesty
+  probe (corr 0.45) and was NOT shipped — recorded in EPIC.md.
+- 75 tests; CI gallery smoke; CHANGELOG started.
 
 ## [1.1.1] — 2026-06-12
 - Fix: the 1.1.0 wheel shipped with a stale `__version__ = "1.0.0"` string
