@@ -1,6 +1,6 @@
 # resona — the FFT of operators
 
-<p align="center"><img src="docs/assets/hero.png" alt="resona — the FFT of operators: probe, compose, read" width="820"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/dimaq12/resona/main/docs/assets/hero.png" alt="resona — the FFT of operators: probe, compose, read" width="820"></p>
 
 > `fft(x)` takes a **signal** to the basis where convolution becomes pointwise
 > multiply. `resona.of(A)` takes an **operator** (anything that can multiply a
@@ -45,11 +45,11 @@ Every line above is matrix-free: the cost is the matvec, not `O(N³)`.
 
 ## Choose your door
 
-🚶 **New to operators / numerics?** Take **[the tour](docs/tour.md)** — ten
+🚶 **New to operators / numerics?** Take **[the tour](https://github.com/dimaq12/resona/blob/main/docs/tour.md)** — ten
 stops from "what is a matvec" to designing your own operators, every stop in
 plain words first, the math second.
 
-<p align="center"><a href="docs/tour.md"><img src="docs/assets/tour-map.svg" alt="the tour: ten stops" width="900"></a></p>
+<p align="center"><a href="https://github.com/dimaq12/resona/blob/main/docs/tour.md"><img src="https://raw.githubusercontent.com/dimaq12/resona/main/docs/assets/tour-map.svg" alt="the tour: ten stops" width="900"></a></p>
 
 🎓 **Mathematician?** The library is a dictionary of theorems made executable —
 each entry verified in `tests/` and `examples/` against dense ground truth:
@@ -71,7 +71,7 @@ each entry verified in `tests/` and `examples/` against dense ground truth:
 | `from_measure` / `from_eigenbasis` | the inverse spectral problem (Stieltjes / Jacobi); synthesis of operators to order | eig = order to 5.6e-15 |
 | `s.effective_rank()` | Φ₁ participation ratio; the Extraction-Law cost dial | dequantization boundary (Tang) |
 
-🔧 **Have a task right now?** The **[cookbook](docs/README.md)**: find your task
+🔧 **Have a task right now?** The **[cookbook](https://github.com/dimaq12/resona/blob/main/docs/README.md)**: find your task
 in the "I want to…" table, copy the recipe.
 
 ## What it solves (matrix-free, one primitive)

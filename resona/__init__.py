@@ -23,7 +23,7 @@ from . import wkernel, lift, beta, defect, free, subordination, cost, flow, solv
 #: convenience: ``resona.of(matvec, N)`` == ``Spectral.of(matvec, N)``
 of = Spectral.of
 
-__version__ = "0.4.0"
+__version__ = "1.0.0"
 __all__ = ["Spectral", "of", "apply", "local_spectrum", "local_density",
            "from_measure", "from_eigenbasis", "wkernel", "lift", "beta", "defect", "free",
            "subordination", "cost", "flow", "solve"]
