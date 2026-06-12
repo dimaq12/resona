@@ -20,6 +20,7 @@ python3 examples/<dir>/<name>.py
 | `tracy_widom_edge.py` | universal fluctuation law of `extreme()` | std·N^⅔→1.27, exp −0.65 |
 | `inverse_spectral.py` | hear the shape of an operator — the inverse of `of` (`from_measure`) | recover 3e-7; eigenvalues-alone fail |
 | `signals.py`, `image_anomaly.py` | spectral analysis of 1D signals / images | — |
+| 🎯 `covariance_cleaning.py` | FREE DECONVOLUTION: un-add MP noise from a sample covariance (RIE) | 1.81x closer, 95% of oracle; risk self-deception 4.15x → 0.94x |
 
 ## quantum/ — one dial (Φ₁), many problems · [details](quantum/README.md)
 | file | what | metric |
@@ -72,6 +73,7 @@ python3 examples/<dir>/<name>.py
 | `lorenz_control.py` | steer Lorenz chaos via W=∂λ/∂param | stabilized; dominant knob σ |
 | 🎯 `maxwell_4_3.py` | the 4/3 EM-mass paradox as a spectral signature | ratio 1.333333 (caveat: scaling not rank-drop) |
 | `dark_matter_rotation.py` | NGC 3198 rotation curve: Newton vs MOND vs halo | recovered a₀=1.15e-10 (Milgrom 1.2e-10) |
+| 🎯 `hilbert_polya.py` | THE zeta-zero operator: built, verified, interrogated | eig=zeros to 2.8e-13; Weyl corr 0.9996; ⟨r⟩ 0.615 vs GUE ctrl 0.590; β-fluct 1.42x smoother than GUE |
 
 ## wild/ — for fun (still honest)
 | file | what | metric |

@@ -70,6 +70,8 @@ each entry verified in `tests/` and `examples/` against dense ground truth:
 | `lift.carleman_*` | Carleman linearization; over GF(p), x^p≡x makes ANY logic exactly linear | 0 errors on all pⁿ inputs |
 | `from_measure` / `from_eigenbasis` | the inverse spectral problem (Stieltjes / Jacobi); synthesis of operators to order | eig = order to 5.6e-15 |
 | `s.effective_rank()` | Φ₁ participation ratio; the Extraction-Law cost dial | dequantization boundary (Tang) |
+| `free.rie_clean` | free DEconvolution: Ledoit–Péché / Bun–Bouchaud–Potters RIE | 95% of the oracle at q=1/2 |
+| `s.trace(f, with_err=True)` | the stochastic estimate with its own standard error (probe scatter) | bars bracket truth, free |
 
 🔧 **Have a task right now?** The **[cookbook](https://github.com/dimaq12/resona/blob/main/docs/README.md)**: find your task
 in the "I want to…" table, copy the recipe.
@@ -95,6 +97,8 @@ scripts, every metric printed by the script itself:
 | **Anderson localization** | metal→insulator from disorder, matrix-free | Λ: 0.97→0.15 in 3.4s |
 | **Tracy–Widom edge** | the universal fluctuation law of `extreme()` | std·N^⅔→1.27, measured exp −0.65 (theory −⅔) |
 | **JWST image analysis** | structure map, source detection, denoising — straight from PyPI | corr 0.97 vs dense; front found |
+| **Covariance cleaning (RIE)** | free deconvolution of Marchenko–Pastur noise | 1.81× closer to truth, 95% of oracle |
+| **The zeta-zero operator** | Hilbert–Pólya computationally: built, verified, interrogated | eig = zeros to 2.8e-13; β-rigidity > GUE |
 
 More broadly: density of states, `Tr f(A)` (log-det, `Tr A⁻¹`, partition
 functions, Schatten norms), extreme eigenvalues & gaps, disorder-averaged

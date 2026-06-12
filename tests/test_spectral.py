@@ -193,3 +193,59 @@ def test_condition_polish_more_honest():
     k_pol = s.condition(polish=True)
     assert k_pol >= k_plain * 0.999
     assert k_pol > 1e5            # polish actually finds the hidden small edge
+
+
+def _hermitian(N, seed=4):
+    rng = np.random.default_rng(seed)
+    H = rng.standard_normal((N, N)) + 1j * rng.standard_normal((N, N))
+    return (H + H.conj().T) / np.sqrt(8 * N)
+
+
+def test_of_complex_hermitian():
+    # quantum-grade: complex Hermitian operator (magnetic phases) — of() must
+    # read its spectrum without any real-representation workaround
+    N = 500
+    H = _hermitian(N)
+    ev = np.linalg.eigvalsh(H)
+    s = Spectral.of(lambda v: H @ v, N, k=48, probes=12)
+    lo, hi = s.extreme()
+    assert abs(lo - ev[0]) < 5e-3 and abs(hi - ev[-1]) < 5e-3
+    fro = np.sqrt((ev ** 2).sum())
+    assert abs(s.moment(1) - ev.sum()) < 3 * np.sqrt(2 / 12) * fro   # 3σ Hutchinson
+    assert abs(s.moment(2) - (ev ** 2).sum()) / (ev ** 2).sum() < 0.10
+    assert np.all(np.abs(s.nodes.imag) == 0) if np.iscomplexobj(s.nodes) else True
+
+
+def test_local_spectrum_complex_state():
+    N = 300
+    H = _hermitian(N, seed=9)
+    ev, V = np.linalg.eigh(H)
+    psi = (V[:, 0] + V[:, -1]) / np.sqrt(2)          # superposition state
+    from resona import local_spectrum
+    th, w = local_spectrum(lambda v: H @ v, psi, k=60)
+    assert abs(w.sum() - 1.0) < 1e-8
+    # the local measure from psi must put ~half weight on each edge eigenvalue
+    w_lo = w[np.abs(th - ev[0]) < 1e-8].sum()
+    w_hi = w[np.abs(th - ev[-1]) < 1e-8].sum()
+    assert abs(w_lo - 0.5) < 1e-6 and abs(w_hi - 0.5) < 1e-6
+
+
+def test_trace_error_bars():
+    N = 600
+    rng = np.random.default_rng(8)
+    A = rng.standard_normal((N, N)); A = A @ A.T / N + np.eye(N)
+    truth = np.linalg.slogdet(A)[1]
+    s = Spectral.of(lambda v: A @ v, N, k=48, probes=16)
+    val, err = s.trace(np.log, with_err=True)
+    assert err > 0
+    assert abs(val - truth) < 5 * err            # the bar brackets the truth
+    assert s.trace(np.log) == val                # default return unchanged
+    v2, e2 = s.moment(2, with_err=True)
+    assert e2 > 0 and abs(v2 - s.moment(2)) == 0
+
+
+def test_error_bars_need_probes():
+    s = Spectral(np.array([1.0, 2.0]), np.array([0.5, 0.5]), N=2)
+    import pytest as _pt
+    with _pt.raises(ValueError):
+        s.trace(np.log, with_err=True)

@@ -27,6 +27,9 @@ matvec = lambda v: A @ v          # your operator, however you can apply it
 | denoise a signal / image | `resona.apply(L, lowpass, x)` | [solving-and-evolving](solving-and-evolving.md) | [`image_anomaly.py`](../examples/image_anomaly.py) |
 | get the spectrum of `A+B` without forming it | `(sA + sB).extreme()` | [composing-operators](composing-operators.md) | [`killer_tasks.py`](../examples/killer_tasks.py) |
 | compose two spectra you measured separately | `resona.lift.free_convolution(sA,sB)` | [composing-operators](composing-operators.md) | [`spectral_phenomena/free_convolution_flow.py`](../examples/spectral_phenomena/free_convolution_flow.py) |
+| CLEAN a noisy sample covariance (free deconvolution / RIE) | `resona.free.rie_clean(eigs, q=N/T)` | [composing-operators](composing-operators.md) | [`covariance_cleaning.py`](../examples/covariance_cleaning.py) |
+| subtract additive noise from a spectrum | `resona.free.rie_clean_additive(eigs, σ)` | [composing-operators](composing-operators.md) | [`covariance_cleaning.py`](../examples/covariance_cleaning.py) |
+| get error bars on a stochastic trace | `s.trace(f, with_err=True)` | [reading-spectra](reading-spectra.md) | — |
 | disorder-average a DOS (no realizations) | `resona.subordination.averaged_dos(sA,σ,xs)` | [composing-operators](composing-operators.md) | [`anderson_localization.py`](../examples/anderson_localization.py) |
 | CONSTRUCT an operator with a prescribed spectrum | inverse-CDF levels → `resona.from_measure(levels, 1/N)` | [inverse-problems](inverse-problems.md) | [`spectral_phenomena/operator_synthesis.py`](../examples/spectral_phenomena/operator_synthesis.py) |
 | recover the operator from its spectrum | `resona.from_eigenbasis(λ,V)` / `from_measure(λ,w)` | [inverse-problems](inverse-problems.md) | [`inverse_spectral.py`](../examples/inverse_spectral.py) |

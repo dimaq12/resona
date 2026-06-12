@@ -170,3 +170,35 @@ def test_wkernel_design_tikhonov():
     resid = (W.T @ W + reg * smax2 * np.eye(n)) @ dk - W.T @ y     # normal equations
     assert np.max(np.abs(resid)) < 1e-8
     assert np.linalg.norm(dk) < np.linalg.norm(dk0) + 1e-9         # regularized = smaller
+
+
+def test_rie_clean_sample_covariance():
+    # free deconvolution of Marchenko-Pastur noise: must beat the raw empirical
+    # covariance and come close to the oracle (best possible with E's basis)
+    from resona.free import rie_clean
+    rng = np.random.default_rng(0)
+    N, T = 200, 400
+    lam_true = np.concatenate([[12.0, 6.0], np.linspace(2.0, 0.5, N - 2)])
+    U = np.linalg.qr(rng.standard_normal((N, N)))[0]
+    C = (U * lam_true) @ U.T
+    X = rng.multivariate_normal(np.zeros(N), C, size=T)
+    E = X.T @ X / T
+    le, Ue = np.linalg.eigh(E)
+    xi = rie_clean(le, q=N / T)
+    xi_or = np.array([Ue[:, i] @ C @ Ue[:, i] for i in range(N)])
+    err = lambda lam: np.linalg.norm((Ue * lam) @ Ue.T - C)
+    assert err(xi) < 0.7 * err(le)               # ≥1.4x closer to the truth
+    assert err(xi_or) > 0.85 * err(xi)           # within ~15% of the oracle
+
+
+def test_rie_clean_additive():
+    from resona.free import rie_clean_additive
+    rng = np.random.default_rng(1)
+    N, sigma = 300, 0.7
+    A = np.diag(np.linspace(-2, 2, N))
+    W = rng.standard_normal((N, N)); W = (W + W.T) / np.sqrt(2 * N)
+    E = A + sigma * W
+    le, Ue = np.linalg.eigh(E)
+    xi = rie_clean_additive(le, sigma)
+    err = lambda lam: np.linalg.norm((Ue * lam) @ Ue.T - A)
+    assert err(xi) < 0.9 * err(le)               # strictly better than raw

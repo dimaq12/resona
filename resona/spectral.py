@@ -96,22 +96,61 @@ def _lanczos(matvec, v0, k):
     return alpha, beta
 
 
+def _lanczos_herm(matvec, v0, k):
+    """k-step Lanczos for a complex HERMITIAN operator, full reorthogonalization.
+
+    The recurrence runs in complex arithmetic, but Hermiticity makes the Jacobi
+    tridiagonal REAL (α real by ⟨q, Hq⟩ ∈ ℝ, β ≥ 0) — so everything downstream
+    (eigh of T, nodes/weights) is unchanged.  Returns (alpha, beta), real.
+    """
+    N = len(v0)
+    V = np.zeros((N, k), complex)
+    alpha = np.zeros(k); beta = np.zeros(max(k - 1, 0))
+    q = np.asarray(v0, complex); q = q / np.linalg.norm(q)
+    V[:, 0] = q; qprev = np.zeros(N, complex); b = 0.0
+    for j in range(k):
+        w = np.asarray(matvec(q), complex) - b * qprev
+        alpha[j] = float(np.real(np.vdot(q, w)))
+        w = w - alpha[j] * q
+        w -= V[:, :j + 1] @ (V[:, :j + 1].conj().T @ w)
+        if j < k - 1:
+            b = float(np.linalg.norm(w))
+            beta[j] = b
+            if b < 1e-12:
+                return alpha[:j + 1], beta[:j]
+            qprev, q = q, w / b
+            V[:, j + 1] = q
+    return alpha, beta
+
+
+def _is_complex_operator(matvec, N):
+    """One deterministic matvec: does the operator live on C^N?"""
+    x = np.cos(np.arange(N) * 0.7) + 0.1
+    try:
+        return bool(np.iscomplexobj(matvec(x)))
+    except Exception:
+        return True              # real test vector rejected → assume complex domain
+
+
 class Spectral:
     """The response of an operator: Ritz nodes (the 'frequencies') and quadrature
     weights (the 'amplitudes'), harvested matrix-free by stochastic Lanczos
     quadrature.  Carries an optional matvec so compositions stay matrix-free.
     """
 
-    def __init__(self, nodes, weights, matvec=None, N=None):
+    def __init__(self, nodes, weights, matvec=None, N=None, probe_sizes=None):
         self.nodes = np.asarray(nodes, float)
         self.weights = np.asarray(weights, float)
         self.matvec = matvec
         self.N = N
+        self.probe_sizes = probe_sizes      # per-probe node counts (error bars)
 
     # ── PROBE (forward transform) ────────────────────────────────────────────
     @classmethod
     def of(cls, matvec, N, k=48, probes=8, seed=0):
-        """Harvest the response of the operator given by `matvec` (acts on R^N).
+        """Harvest the response of the operator given by `matvec` (acts on R^N,
+        or on C^N for a complex HERMITIAN operator — detected automatically;
+        complex probes are used and the read side is unchanged).
 
         Stochastic Lanczos quadrature: `probes` random vectors, `k` Lanczos steps
         each.  Cost O(probes * k) matvecs.  No matrix is formed, no eig is called.
@@ -121,9 +160,16 @@ class Spectral:
         per step — BLAS-3, ~3× faster, the same probe vectors and the same math.
         """
         rng = np.random.default_rng(seed)
+        if _is_complex_operator(matvec, N):
+            # complex HERMITIAN operator: complex Gaussian probes, complex
+            # Lanczos — the tridiagonal (and the whole read side) stays real
+            tridiags = [_lanczos_herm(matvec,
+                                      (rng.standard_normal(N)
+                                       + 1j * rng.standard_normal(N)) / np.sqrt(2), k)
+                        for _ in range(probes)]
         # block pays when the matvec dominates the per-step bookkeeping: measured
         # crossover ~N=1000 (4× faster at N≥2000, ~even below)
-        if probes > 1 and N >= 1000 and _supports_block(matvec, N):
+        elif probes > 1 and N >= 1000 and _supports_block(matvec, N):
             V0 = rng.standard_normal((probes, N)).T          # same draws as the loop
             tridiags = _lanczos_block(matvec, V0, k)
         else:
@@ -136,7 +182,8 @@ class Spectral:
             theta, S = np.linalg.eigh(T)
             nodes.append(theta)
             weights.append(S[0, :] ** 2 / probes)
-        return cls(np.concatenate(nodes), np.concatenate(weights), matvec, N)
+        return cls(np.concatenate(nodes), np.concatenate(weights), matvec, N,
+                   probe_sizes=[len(th) for th in nodes])
 
     # ── COMPOSE (the free-convolution theorem: hard op → linear, matrix-free) ──
     def __add__(self, other: "Spectral") -> "Spectral":
@@ -178,13 +225,31 @@ class Spectral:
         return Spectral(nodes, weights, matvec=None, N=self.N)
 
     # ── READ (inverse transform: any spectral functional) ─────────────────────
-    def trace(self, f) -> float:
-        """Tr f(A) = N · E[f(λ)] = N · Σ w·f(node)."""
-        return float(self.N) * float(np.sum(self.weights * f(self.nodes)))
+    def trace(self, f, with_err: bool = False):
+        """Tr f(A) = N · E[f(λ)] = N · Σ w·f(node).
 
-    def moment(self, p: int) -> float:
-        """Tr(A^p)."""
-        return self.trace(lambda x: x ** p)
+        ``with_err=True`` → (value, stderr): the standard error of the
+        stochastic estimate, read from the scatter of the independent probes
+        (free — no extra matvecs).  The honest number, with its honest ±.
+        """
+        vals = self.weights * f(self.nodes)
+        total = float(self.N) * float(np.sum(vals))
+        if not with_err:
+            return total
+        if not self.probe_sizes or len(self.probe_sizes) < 2:
+            raise ValueError("error bars need the probe structure from "
+                             "Spectral.of with probes >= 2")
+        p = len(self.probe_sizes)
+        ests, i = [], 0
+        for sz in self.probe_sizes:
+            ests.append(float(self.N) * p * float(np.sum(vals[i:i + sz])))
+            i += sz
+        stderr = float(np.std(ests, ddof=1) / np.sqrt(p))
+        return total, stderr
+
+    def moment(self, p: int, with_err: bool = False):
+        """Tr(A^p).  ``with_err=True`` → (value, stderr), see `trace`."""
+        return self.trace(lambda x: x ** p, with_err=with_err)
 
     def density(self, xs, eta: float = 0.1) -> np.ndarray:
         """Density of states ρ(x), Lorentzian-broadened by `eta`."""
@@ -390,8 +455,10 @@ def local_spectrum(matvec, v, k: int = 48):
     (LDOS) at site i.  ``Spectral.of`` averages this over random v (→ the trace);
     here you choose v.  Returns (nodes, weights), weights summing to ‖v‖²-norm 1.
     """
-    v = np.asarray(v, float)
-    al, be = _lanczos(matvec, v, k)
+    if np.iscomplexobj(v) or _is_complex_operator(matvec, len(v)):
+        al, be = _lanczos_herm(matvec, np.asarray(v, complex), k)
+    else:
+        al, be = _lanczos(matvec, np.asarray(v, float), k)
     kk = len(al)
     T = np.diag(al) + np.diag(be[:kk - 1], 1) + np.diag(be[:kk - 1], -1)
     theta, S = np.linalg.eigh(T)
