@@ -14,7 +14,6 @@ resona.lift — the LIFT: make a nonlinear / composed map LINEAR in a lifted bas
   same lift makes ANY logic function an EXACT linear polynomial (x^p ≡ x).
 """
 import numpy as np
-from scipy.optimize import brentq
 
 
 def _nw(s):
@@ -31,30 +30,51 @@ def cauchy(s, z):
 
 
 def r_transform(s, w):
-    """R-transform R(w) = G⁻¹(w) − 1/w (scalar or array w>0). R_{A⊞B}=R_A+R_B."""
-    nodes, wt = _nw(s); wt = wt / wt.sum(); lam = float(nodes.max())
+    """R-transform R(w) = G⁻¹(w) − 1/w (scalar or array w>0). R_{A⊞B}=R_A+R_B.
 
-    def R1(wi):
-        if wi <= 0:
-            return float(np.sum(wt * nodes))                # R(0) = mean
-        g = lambda z: float(np.sum(wt / (z - nodes))) - wi
-        hz = lam + 1.0
-        while float(np.sum(wt / (hz - nodes))) > wi:        # bracket: G↓ from +∞ to 0
-            hz = lam + (hz - lam) * 2.0 + 1.0
-        z = brentq(g, lam + 1e-12, hz)
-        return z - 1.0 / wi
-    return R1(float(w)) if np.isscalar(w) else np.array([R1(float(x)) for x in w])
+    Vectorized bisection on the monotone G (110 halvings → tighter than brentq),
+    all query points solved at once."""
+    nodes, wt = _nw(s); wt = wt / wt.sum(); lam = float(nodes.max())
+    wq = np.atleast_1d(np.asarray(w, float))
+    out = np.empty(len(wq))
+    pos = wq > 0
+    out[~pos] = float(np.sum(wt * nodes))                   # R(0) = mean
+    if pos.any():
+        wp = wq[pos]
+        G = lambda z: (wt[None, :] / (z[:, None] - nodes[None, :])).sum(1)
+        lo = np.full(len(wp), lam + 1e-12)
+        hi = np.full(len(wp), lam + 1.0)
+        for _ in range(200):                                # bracket: G↓ from +∞ to 0
+            mask = G(hi) > wp
+            if not mask.any():
+                break
+            hi[mask] = lam + (hi[mask] - lam) * 2.0 + 1.0
+        for _ in range(110):                                # bisection, machine-tight
+            mid = 0.5 * (lo + hi)
+            high = G(mid) > wp                              # root right of mid
+            lo = np.where(high, mid, lo)
+            hi = np.where(high, hi, mid)
+        out[pos] = 0.5 * (lo + hi) - 1.0 / wp
+    return float(out[0]) if np.isscalar(w) else out
 
 
 def s_transform(s, w):
-    """S-transform (positive spectrum). S_{A⊠B}=S_A·S_B. scalar or array w>0."""
-    nodes, wt = _nw(s); wt = wt / wt.sum(); inv = 1.0 / float(nodes.max())
+    """S-transform (positive spectrum). S_{A⊠B}=S_A·S_B. scalar or array w>0.
 
-    def S1(wi):
-        psi = lambda z: float(np.sum(wt * nodes * z / (1 - nodes * z))) - wi
-        z = brentq(psi, 1e-12, inv - 1e-12)                 # ψ: 0→∞ on (0,1/λmax)
-        return (1 + wi) / wi * z
-    return S1(float(w)) if np.isscalar(w) else np.array([S1(float(x)) for x in w])
+    Vectorized bisection on the monotone ψ (110 halvings → tighter than brentq)."""
+    nodes, wt = _nw(s); wt = wt / wt.sum(); inv = 1.0 / float(nodes.max())
+    wq = np.atleast_1d(np.asarray(w, float))
+    psi = lambda z: (wt[None, :] * nodes[None, :] * z[:, None]
+                     / (1 - nodes[None, :] * z[:, None])).sum(1)
+    lo = np.full(len(wq), 1e-12)
+    hi = np.full(len(wq), inv - 1e-12)
+    for _ in range(110):                                    # ψ: 0→∞ on (0, 1/λmax)
+        mid = 0.5 * (lo + hi)
+        low = psi(mid) < wq
+        lo = np.where(low, mid, lo)
+        hi = np.where(low, hi, mid)
+    out = (1 + wq) / wq * (0.5 * (lo + hi))
+    return float(out[0]) if np.isscalar(w) else out
 
 
 def free_convolution(sA, sB, order=6):
@@ -99,6 +119,46 @@ def carleman_scalar(coeffs, order):
             if 1 <= col <= order and ck != 0.0:
                 M[j - 1, col - 1] += ck * j
     return M
+
+
+def conserved_charge(H, basis, tol=1e-7):
+    """BLIND search for (quasi-)conserved charges: over the span of candidate
+    operators {O_a}, find the Q that most nearly commutes with H.
+
+    The constructive side of the lift principle (a lift exists ⟺ enough
+    conserved charges ⟺ integrability): the commutator-Gram eigenproblem
+        G_ab = Tr([H,O_a]†[H,O_b]),   S_ab = Tr(O_a† O_b),
+        G c = μ S c
+    has its near-zero eigenvalues exactly at the conserved charges — found with
+    NO prior knowledge of what they are.  For an integrable H the search FINDS
+    the charges (energy, total spin, free-fermion bilinears…); for a chaotic H
+    it honestly reports none beyond H itself.
+
+    H     : dense/sparse square matrix (the Hamiltonian).
+    basis : list of candidate operators {O_a} (e.g. k-local Pauli strings).
+    Returns (charges, comm_norms): charges[j] = Σ_a c_a O_a (matrices, unit
+    Frobenius norm) sorted by comm_norms[j] = ‖[H,Q_j]‖/‖Q_j‖ ascending;
+    comm_norms[j] < tol marks a genuine conserved charge.
+
+    HONEST LIMIT: needs the user-supplied basis and forms the commutators —
+    O(|basis|·dim²) memory/time; resolve symmetry sectors for spectral use.
+    """
+    from scipy.linalg import eigh as _geigh
+    H = np.asarray(H)
+    B = [np.asarray(O) for O in basis]
+    C = np.stack([(H @ O - O @ H).ravel() for O in B])      # rows = [H, O_a]
+    M = np.stack([O.ravel() for O in B])
+    G = (C.conj() @ C.T)                                    # Tr([H,O_a]†[H,O_b])
+    S = (M.conj() @ M.T)                                    # Tr(O_a†O_b)
+    G = (G + G.conj().T) / 2; S = (S + S.conj().T) / 2
+    mu, U = _geigh(G, S + 1e-12 * np.eye(len(B)))
+    comm_norms = np.sqrt(np.clip(mu.real, 0.0, None))       # ‖[H,Q]‖/‖Q‖ per optimal Q
+    charges = []
+    for j in range(len(B)):
+        Q = sum(U[a, j] * B[a] for a in range(len(B)))
+        n = np.linalg.norm(Q)
+        charges.append(Q / n if n > 0 else Q)
+    return charges, comm_norms
 
 
 def _gf_solve(V, y, p):

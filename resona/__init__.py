@@ -10,15 +10,20 @@ matrix-free — and from which every spectral functional is read.
     s = resona.of(matvec, N)       # PROBE   — ring the operator, read its modes
     s + t ; s @ t                  # COMPOSE — A+B, A·B  (never formed, never eig'd)
     s.trace(f) ; s.density(x) ; s.extreme() ; s.moment(p)   # READ
-    s.effective_rank()             # the honest cost dial (Φ₁)
+    s.boxplus(t) ; s.cauchy(z) ; s.r(w) ; s.s(w)   # free convolution & lifted coords
+    s.flow(t, xs) ; s.levels(N)    # heat flow / disorder; Beta spectrum closure
+    s.effective_rank() ; s.condition()             # the honest cost dials (Φ₁, κ)
+
+    resona.apply(matvec, f, v)     # APPLY   — f(A)·v: solve, evolve, filter
+    resona.solve.rayleigh_polish   # PRECISION — spend effort only on the defect
 """
 from .spectral import Spectral, apply, local_spectrum, local_density, from_measure, from_eigenbasis
-from . import wkernel, lift, beta, defect, free, subordination, cost, flow
+from . import wkernel, lift, beta, defect, free, subordination, cost, flow, solve
 
 #: convenience: ``resona.of(matvec, N)`` == ``Spectral.of(matvec, N)``
 of = Spectral.of
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __all__ = ["Spectral", "of", "apply", "local_spectrum", "local_density",
            "from_measure", "from_eigenbasis", "wkernel", "lift", "beta", "defect", "free",
-           "subordination", "cost", "flow"]
+           "subordination", "cost", "flow", "solve"]

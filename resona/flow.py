@@ -15,12 +15,14 @@ import numpy as np
 from . import subordination as _sub
 
 
-def burgers_density(spectral, t, xs, eta=1e-3):
+def burgers_density(spectral, t, xs, eta=1e-3, g0=None):
     """Density of the free-heat-flowed measure μ_t = μ_0 ⊞ semicircle(t), on xs.
 
     (t is the semicircle VARIANCE; equivalently A + √t·GOE.)  A shock = band edge.
+    Thin alias of `subordination.averaged_dos(spectral, √t, xs)` — the flow face
+    of the same fixed point.  `g0` warm-starts a t-sweep (see `shock_time`).
     """
-    return _sub.averaged_dos(spectral, np.sqrt(max(t, 0.0)), xs, eta=eta)
+    return _sub.averaged_dos(spectral, np.sqrt(max(t, 0.0)), xs, eta=eta, g0=g0)
 
 
 def shock_time(spectral, t_max=4.0, n_t=160, n_x=400, eta=2e-3, thresh=0.02):

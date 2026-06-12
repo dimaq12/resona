@@ -29,17 +29,38 @@ def pastur(GA, z, sigma2, iters=2000, tol=1e-13, damp=0.5):
     return g
 
 
-def averaged_dos(spectral, sigma, xs, eta=1e-3):
+def pastur_grid(spectral, zs, sigma2, iters=2000, tol=1e-13, damp=0.5, g0=None):
+    """The subordination fixed point g = G_A(z − σ²·g) solved on a whole grid of
+    complex z AT ONCE — one vectorized damped iteration with an active mask
+    (converged points freeze), instead of len(zs) scalar solves.  Same fixed
+    point, same tolerance, ~10× faster.  `g0` warm-starts (e.g. from the
+    previous step of a t-sweep).  Returns g(zs)."""
+    nodes, w = _nw(spectral)
+    w = w / w.sum()
+    Z = np.asarray(zs, complex)
+    GA = lambda zz: (w[None, :] / (zz[:, None] - nodes[None, :])).sum(1)
+    g = GA(Z) if g0 is None else np.array(g0, complex)
+    active = np.ones(len(Z), bool)
+    for _ in range(iters):
+        gn = GA(Z[active] - sigma2 * g[active])
+        done = np.abs(gn - g[active]) < tol
+        upd = (1 - damp) * g[active] + damp * gn
+        upd[done] = gn[done]                       # parity with the scalar `pastur`
+        g[active] = upd
+        idx = np.where(active)[0]
+        active[idx[done]] = False
+        if not active.any():
+            break
+    return g
+
+
+def averaged_dos(spectral, sigma, xs, eta=1e-3, g0=None):
     """Density of  μ_A ⊞ semicircle(σ²)  (= A + σ·GOE, disorder-averaged), on xs.
 
     Closed form via the Pastur fixed point — no disorder realizations, no eig.
+    Vectorized over the whole grid (see `pastur_grid`).
     """
-    GA = lambda z: cauchy(spectral, z)
-    s2 = sigma ** 2
-    out = np.empty(len(xs))
-    for i, x in enumerate(xs):
-        g = pastur(GA, x + 1j * eta, s2)
-        out[i] = max(-g.imag / np.pi, 0.0)
-    return out
+    g = pastur_grid(spectral, np.asarray(xs, float) + 1j * eta, sigma ** 2, g0=g0)
+    return np.maximum(-g.imag / np.pi, 0.0)
     # (the moment version μ_A ⊞ semicircle is just resona.lift.free_convolution
     #  with a semicircle, or read off as m₂ = m₂(A) + σ² — no separate function.)

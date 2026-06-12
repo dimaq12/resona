@@ -50,6 +50,27 @@ def is_extractable(signal, windows=(20, 40, 80, 120), grow=0.25):
     return bool(extractable), ranks
 
 
+def level_spacing_ratio(eigenvalues, eps=1e-9):
+    """The integrability detector: mean consecutive level-spacing ratio
+    ⟨r⟩ = ⟨min(s_i, s_{i+1}) / max(s_i, s_{i+1})⟩ of a spectrum.
+
+        ⟨r⟩ ≈ 0.386  → Poisson statistics → integrable (a lift EXISTS)
+        ⟨r⟩ ≈ 0.531  → GOE level repulsion → chaotic (no lift)
+        (GUE 0.600, GSE 0.676; rigid picket-fence → 1.)
+
+    Unfolding-free (ratios cancel the local density), 3 lines, O(N log N).
+
+    LOUD CAVEAT (a real numerics trap): RESOLVE ALL SYMMETRY SECTORS FIRST.
+    Levels from different sectors do not repel; mixing sectors overlays
+    independent series and FAKES Poisson — an un-projected chaotic Hamiltonian
+    will read "integrable".  Project H into one sector (one reflection /
+    momentum / magnetization sector) before calling this.
+    """
+    s = np.diff(np.sort(np.asarray(eigenvalues, float)))
+    s = s[s > eps]
+    return float(np.mean(np.minimum(s[:-1], s[1:]) / np.maximum(s[:-1], s[1:])))
+
+
 def extraction_cost(eps, dist, a=1.0, b=1.0, c=1.0):
     """The law value  Cost = c · ε^{-a} · dist^{-b}."""
     return c * np.asarray(eps, float) ** (-a) * np.asarray(dist, float) ** (-b)

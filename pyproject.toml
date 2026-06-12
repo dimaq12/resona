@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "resona"
-version = "0.1.0"
+version = "0.4.0"
 description = "The FFT of operators: probe, compose, read — matrix-free spectral computation with a built-in cost law."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -26,6 +26,7 @@ dependencies = ["numpy>=1.20", "scipy>=1.7"]
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
+exact = ["mpmath>=1.2"]   # resona.solve.catastrophe_solve (extended-precision roots)
 
 [project.urls]
 Homepage = "https://github.com/dimaq12/resona"

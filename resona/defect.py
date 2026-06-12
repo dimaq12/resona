@@ -17,6 +17,13 @@ spectrum.  Two consequences are exposed here:
   descent, power iteration, Gauss–Seidel, PageRank), the defect of a doubling is
   EXACTLY D_{2n} = J^n · D_n — so one cheap defect predicts the converged answer
   with no extra iterations.
+
+• The PSEUDOSPECTRUM — the geometric half of the defect calculus.  For a NORMAL
+  operator the spectrum is the whole story; for a defective one (a Jordan block)
+  the spectrum LIES: an order-q defect blooms the point eigenvalue into a disk
+  of radius ε^{1/q} — the same catastrophe exponent as the hardness law
+  (`theory/hardness_exponents.py`).  GMRES/Arnoldi convergence follows the
+  pseudospectrum, not the spectrum.
 """
 import numpy as np
 
@@ -48,6 +55,85 @@ def richardson_limit(values, ns, p0=1.0):
             newcol[k] = (r * prev[k] - prev[k - 1]) / (r - 1.0)
         T.append(newcol)
     return T[L - 1][L - 1]
+
+
+def sigma_min(A, z, N=None, rmatvec=None, k=96, seed=0):
+    """Smallest singular value of (A − zI).
+
+    A : square ndarray (exact, via SVD) OR a matvec callable (then pass N and,
+    for a NON-symmetric operator, `rmatvec` for Aᵀx — σ_min needs both actions).
+    Matrix-free path: Lanczos extreme of the PSD operator (A−zI)ᵀ(A−zI); for
+    complex z the system is realified to 2N (σ values are unchanged).
+    """
+    if not callable(A):
+        M = np.asarray(A, complex) - z * np.eye(len(A))
+        return float(np.linalg.svd(M, compute_uv=False)[-1])
+    if N is None:
+        raise ValueError("sigma_min(matvec, ...) needs N")
+    rmv = rmatvec or A                                    # symmetric default
+    zr, zi = float(np.real(z)), float(np.imag(z))
+
+    def B(x):                                             # (A − zI) on realified C^N
+        u, v = x[:N], x[N:]
+        Au, Av = A(u), A(v)
+        return np.concatenate([Au - zr * u + zi * v, Av - zr * v - zi * u])
+
+    def Bt(x):                                            # (A − zI)ᵀ (realified adjoint)
+        u, v = x[:N], x[N:]
+        Au, Av = rmv(u), rmv(v)
+        return np.concatenate([Au - zr * u - zi * v, Av - zr * v + zi * u])
+
+    from .spectral import _lanczos
+    rng = np.random.default_rng(seed)
+    al, be = _lanczos(lambda x: Bt(B(x)), rng.standard_normal(2 * N), k)
+    kk = len(al)
+    T = np.diag(al) + np.diag(be[:kk - 1], 1) + np.diag(be[:kk - 1], -1)
+    lam_min = float(np.linalg.eigvalsh(T)[0])
+    return float(np.sqrt(max(lam_min, 0.0)))
+
+
+def pseudospectrum_radius(A, eps, z0=0.0, N=None, rmatvec=None, direction=1.0,
+                          r_max=None, k=96, iters=60):
+    """The local ε-pseudospectrum radius at z0: the largest r along `direction`
+    with  σ_min(A − (z0 + r·direction)I) < eps.
+
+    THE LAW (verified exactly on Jordan blocks): an order-q defect blooms the
+    point spectrum into a disk of radius ε^{1/q}.  So:
+        radius ≈ eps        → benign (normal-like): the eigenvalue is trustworthy;
+        radius ≈ eps^{1/q}  → an order-q defect: the eigenvalue is uncertain to
+                              that radius, and iterative solvers converge slowly.
+    Read q ≈ ln eps / ln radius.
+
+    Bisection in log-r on the monotone growth of σ_min away from the bloom
+    (`iters` halvings).  HONEST LIMIT: with a matvec, σ_min is itself a Lanczos
+    estimate; near a deep defect it is ill-conditioned — that IS the phenomenon.
+    Report the resolution, never a headline.
+    """
+    direction = complex(direction)
+    direction /= abs(direction)
+    sm = lambda r: sigma_min(A, z0 + r * direction, N=N, rmatvec=rmatvec, k=k)
+    if r_max is None:
+        r_max = 4.0
+        while sm(r_max) < eps and r_max < 1e6:
+            r_max *= 4.0
+    if sm(r_max) < eps:
+        return float(r_max)                               # bloom exceeds the search box
+    lo, hi = 0.0, float(r_max)
+    for _ in range(iters):
+        mid = 0.5 * (lo + hi) if lo == 0.0 else float(np.sqrt(lo * hi))
+        if sm(mid) < eps:
+            lo = mid
+        else:
+            hi = mid
+    return float(lo)
+
+
+def pseudospectrum(A, zs, eps, N=None, rmatvec=None, k=96):
+    """Boolean mask of the ε-pseudospectrum  Λ_ε = { z : σ_min(A − zI) < eps }
+    over an array of complex grid points zs."""
+    zs = np.asarray(zs)
+    return np.array([sigma_min(A, z, N=N, rmatvec=rmatvec, k=k) < eps
+                     for z in zs.ravel()]).reshape(zs.shape)
 
 
 def defect_jump(D_n, J, n):

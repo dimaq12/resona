@@ -124,3 +124,72 @@ def test_from_eigenbasis_exact():
     diag_h, off_h = from_eigenbasis(lam, V)
     assert np.max(np.abs(diag_h - d)) < 1e-12
     assert np.max(np.abs(off_h - e)) < 1e-12
+
+
+def test_block_probe_matches_sequential():
+    # the BLAS-3 block path must reproduce the single-vector path: same probe
+    # vectors, same Lanczos math — nodes/weights equal to rounding
+    N = 1200                                                         # above the block threshold
+    rng = np.random.default_rng(7)
+    A = rng.standard_normal((N, N)); A = (A + A.T) / np.sqrt(2 * N)
+    s_blk = Spectral.of(lambda x: A @ x, N, k=32, probes=6)          # block-capable
+    s_seq = Spectral.of(lambda x: A @ np.asarray(x).reshape(N), N,   # force 1-D only
+                        k=32, probes=6)
+    assert np.max(np.abs(np.sort(s_blk.nodes) - np.sort(s_seq.nodes))) < 1e-10
+    assert np.max(np.abs(np.sort(s_blk.weights) - np.sort(s_seq.weights))) < 1e-12
+
+
+def test_hub_methods_delegate():
+    # the Spectral hub: every lifted/derived quantity reads off the same object
+    N = 400
+    rng = np.random.default_rng(11)
+    A = rng.standard_normal((N, N)); A = A @ A.T / N
+    s = Spectral.of(lambda x: A @ x, N)
+    from resona import lift, beta
+    assert s.cauchy(9.0) == lift.cauchy(s, 9.0)
+    assert s.r(0.2) == lift.r_transform(s, 0.2)
+    assert s.s(0.5) == lift.s_transform(s, 0.5)
+    assert np.allclose(s.levels(N), beta.beta_from(s, N))
+    lo, hi = s.extreme()
+    assert s.condition() == hi / lo
+    k = s.cumulants(3)
+    assert abs(k[0] - s.moment(1) / N) < 1e-12
+
+
+def test_transform_full_name_aliases():
+    assert Spectral.r_transform is Spectral.r
+    assert Spectral.s_transform is Spectral.s
+
+
+def test_boxplus_as_spectral_gauss():
+    # semicircle ⊞ semicircle = semicircle(2σ²): the quadrature Spectral must
+    # reproduce the free-convolved moments EXACTLY (that is its contract)
+    N = 2000
+    rng = np.random.default_rng(3)
+    A = rng.standard_normal((N, N)); A = (A + A.T) / np.sqrt(2 * N)
+    B = rng.standard_normal((N, N)); B = (B + B.T) / np.sqrt(2 * N)
+    sA = Spectral.of(lambda x: A @ x, N)
+    sB = Spectral.of(lambda x: B @ x, N)
+    m = sA.boxplus(sB, order=6)
+    q = sA.boxplus(sB, order=6, as_spectral=True)
+    assert isinstance(q, Spectral)
+    # an n=3-point Gauss quadrature reproduces m_1..m_{2n-1}=m_5 exactly
+    for p in range(1, 6):
+        mq = float(np.sum(q.weights * q.nodes ** p))
+        assert abs(mq - m[p - 1]) < 1e-8 * max(1.0, abs(m[p - 1]))
+    # m2 of the free sum ≈ m2(A) + m2(B) ≈ 2 (semicircles of variance 1)
+    assert abs(m[1] - 2.0) < 0.1
+
+
+def test_condition_polish_more_honest():
+    # ill-conditioned PSD: plain condition() under-reads; polish must not shrink it
+    N = 1500
+    rng = np.random.default_rng(5)
+    U = rng.standard_normal((N, N)); U = np.linalg.qr(U)[0]
+    lam = np.concatenate([[1e-6], np.linspace(0.5, 2.0, N - 1)])
+    A = (U * lam) @ U.T
+    s = Spectral.of(lambda x: A @ x, N, k=64, probes=8)
+    k_plain = s.condition()
+    k_pol = s.condition(polish=True)
+    assert k_pol >= k_plain * 0.999
+    assert k_pol > 1e5            # polish actually finds the hidden small edge
