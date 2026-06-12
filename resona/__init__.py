@@ -26,7 +26,7 @@ from .cloud import cloud, Cloud
 #: convenience: ``resona.of(matvec, N)`` == ``Spectral.of(matvec, N)``
 of = Spectral.of
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 __all__ = ["Spectral", "of", "apply", "quadform", "local_spectrum", "local_density",
            "from_measure", "from_eigenbasis", "cloud", "Cloud", "wkernel", "lift", "beta",
            "defect", "free", "subordination", "cost", "flow", "solve", "thermal"]

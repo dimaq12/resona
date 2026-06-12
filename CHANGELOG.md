@@ -3,6 +3,33 @@
 All notable changes to resona.  The discipline throughout: every number below
 is printed by a test or a gallery stand, not asserted by hand.
 
+## [1.3.0] — 2026-06-12
+EPIC2 "the defect listens back" — every port stress-tested in the source
+corpus FIRST (FA/revise_stress/STRESS_REPORT.md: 4 of 5 gold survived; the
+fifth was demoted by its own table and NOT shipped).  Boundary contract held:
++5 callables, +0 modules, no god-methods.
+- **defect.generator_read** — the solver's defect IS the Koopman generator
+  (BE: D_n = (t²/4n)·A²e^{−tA}u₀, O(n⁻²) exact incl. defective Grcar κ=∞);
+  Crank–Nicolson refused with the measured O(1) deviation.
+- **defect.spectroscopy** — per-band barycentre of the defect power (BDS):
+  35/35 PDE suite reproduced THROUGH the library function; stable at 5%
+  snapshot noise where the classical ratio estimator dies at 1e-5.
+- **wkernel.track** — crossing-safe spectral-flow integration (exact at a
+  crossing where sorted eigenvalues break by O(1); ≥100× frozen-W);
+  **wkernel.kappa_w** — the trust-region dial, documented by its negative
+  result first (accuracy ρ=0.93; cost ρ≈0.05 — NOT a difficulty oracle).
+- **subordination.contraction** — |T′| of the Pastur fixed point: the
+  edge-of-chaos read as a pure observable (the critical-window caveat from
+  the stress campaign is in the docstring).
+- **THE API BEAUTY PASS** (API_REVIEW.md): three persona reviews + taxonomy
+  audit; newcomer guessed 8/10 calls blind.  14 polish items applied (leaked
+  imports unlisted, trace certified+with_err guard, effective_rank with_err,
+  rie_clean/zoom/track domain guards, honest docstring reframes); 9 written
+  up for 2.0, not applied; 9 examined and kept.
+- Stand: examples/defect_spectroscopy.py (generator to 4.2e-5
+  Richardson-checked; the noise table live).
+- 96 tests; the ratchet stayed clean throughout.
+
 ## [1.2.0] — 2026-06-12
 The epic (see [EPIC.md](EPIC.md)) — three contracts held throughout: zero new
 top-level verbs, the metric ratchet (full-gallery diff at every phase, zero
