@@ -247,3 +247,8 @@ Jacobi coordinates (FRONTIER §5 open question), eta invariant / spectral flow.
   spectra or filtered-typicality estimators (future work, not faked).
   Replaced in Phase E by `thermal_response.py` (S(ω) by typicality, which
   the machinery does support honestly).
+  *Second confirmation (EPIC3 Phase 4, `theory/sff_typicality.py`): the
+  filtered-typicality path was run as pre-registered — the unbiased
+  cross-pair estimator reads the slope and the plateau (ratio 1.05) but the
+  connected dip/ramp needs p ≳ D/K(t) probes (p ~ D at the dip) — the bias
+  is cured, the VARIANCE is the wall.  Parked with the price tag.*
