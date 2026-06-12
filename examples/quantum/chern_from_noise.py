@@ -11,33 +11,40 @@ marker (Bianco–Resta) reads the invariant from real space:
 
     C(r) = −(4π/A_cell) · Im ⟨r| P X̂ P Ŷ P |r⟩ ,    P = θ(μ − H),
 
-and EVERY piece is a resona primitive: the Fermi projector P is one
-`apply(H, step, v)` (complex-Hermitian Lanczos), X̂/Ŷ are diagonal
-multiplications — three Krylov chains per site, no diagonalization, no
-k-space, no Berry-phase integration.
+and the projector is the KPM engine's own move (the Jackson-damped Chebyshev
+measure behind `engine="kpm"`), inlined as a POLYNOMIAL: when one fixed
+function of H is applied thousands of times, precompute its Chebyshev
+coefficients ONCE and pay only matvecs per chain — no per-vector Lanczos
+restarts.  X̂/Ŷ are diagonal multiplications — three polynomial chains per
+site, no diagonalization, no k-space, no Berry-phase integration.
 
 WHAT PRINTS BELOW (all measured live):
   • trivial phase (large staggered mass):  C = +0.000  — exactly zero;
-  • the two topological phases (φ = ±π/2): C = ∓0.92 at L=12, converging to
-    the integer with lattice size — measured 0.81 → 0.92 → 0.97 at
-    L = 8 → 12 → 16 (reproduce with --sweep);
+  • the two topological phases (φ = ±π/2): C = ∓0.93 at L=12, converging to
+    the integer with lattice size — measured 0.93 → 0.97 → 0.985 at
+    L = 12 → 16 → 20 (reproduce with --sweep);
   • the deviation from the integer is a FINITE-SIZE effect (the open-boundary
-    edge states pinch the gap to ~0.04, which both the step-function Krylov
-    polynomial and the marker's locality feel) — it shrinks with L, the
-    hallmark of a topological quantity.
+    edge states pinch the gap to ~0.04, which both the step polynomial and
+    the marker's locality feel) — it shrinks with L, the hallmark of a
+    topological quantity.
 
 HONEST LIMITS.  The projector is a polynomial approximation of a step
-through a small gap: k must grow as the gap closes (k=160 here); the marker
-is exactly quantized only in the bulk/thermodynamic limit — we REPORT the
-finite-size value, not a rounded integer.
+through a small gap: the degree must grow as the gap closes (degree=500 at
+L=12); the marker is exactly quantized only in the bulk/thermodynamic limit
+— we REPORT the finite-size value, not a rounded integer.
 
-Run:  python3 examples/quantum/chern_from_noise.py        (~2.5 min)
-      python3 examples/quantum/chern_from_noise.py --sweep  (adds L-convergence)
+ENGINE NOTE (the EPIC3 retrofit, measured): the first version of this stand
+used `resona.apply(H, step, v, k=160)` — a fresh Krylov factorization per
+chain.  Correct, but it re-derives the same step polynomial for every
+vector.  The precomputed Chebyshev projector below reads the SAME marker
+7× faster at L=12 (1 s vs 7 s) and buys L=20: C = +0.985.
+
+Run:  python3 examples/quantum/chern_from_noise.py          (~5 s)
+      python3 examples/quantum/chern_from_noise.py --sweep  (adds L-convergence, ~15 s)
 """
 import sys, os, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 import numpy as np
-import resona
 
 T2 = 0.15
 
@@ -73,10 +80,37 @@ def haldane(L, t1=1.0, t2=T2, phi=np.pi / 2, m=0.0):
     return H, pos[:, 0].copy(), pos[:, 1].copy(), idx
 
 
-def chern_marker(H, X, Y, orbitals, k=160):
-    """C at the given orbitals: three Krylov projector chains per orbital."""
-    mv = lambda v: H @ v
-    proj = lambda v: resona.apply(mv, lambda lam: (lam < 0.0) * 1.0, v, k=k)
+def cheb_projector(H, degree):
+    """P = θ(−H) as a Jackson-damped Chebyshev polynomial of degree `degree`.
+
+    The KPM measure as an OPERATOR: coefficients of the indicator 1_{λ<0}
+    computed once (closed form), Jackson-damped against Gibbs ringing, then
+    every application is `degree` matvecs through the three-term recurrence.
+    Interval from the Gershgorin bound — no eigensolve anywhere.
+    """
+    scale = float(np.abs(H).sum(axis=1).max()) * 1.001   # Gershgorin: |λ| ≤ scale
+    th1, th2 = np.pi / 2, np.pi                          # λ/scale ∈ [−1,0] ⇔ θ ∈ [π/2,π]
+    j = np.arange(1, degree + 1)
+    jackson = ((degree - j + 1) * np.cos(np.pi * j / (degree + 1))
+               + np.sin(np.pi * j / (degree + 1)) / np.tan(np.pi / (degree + 1))
+               ) / (degree + 1)
+    c = np.empty(degree + 1)
+    c[0] = (th2 - th1) / np.pi
+    c[1:] = 2.0 * (np.sin(j * th2) - np.sin(j * th1)) / (j * np.pi) * jackson
+
+    def P(v):
+        t0, t1 = v, (H @ v) / scale
+        acc = c[0] * t0 + c[1] * t1
+        for _ in range(2, degree + 1):
+            t0, t1 = t1, 2.0 * (H @ t1) / scale - t0
+            acc += c[_] * t1
+        return acc
+    return P
+
+
+def chern_marker(H, X, Y, orbitals, degree=500):
+    """C at the given orbitals: three projector chains per orbital."""
+    proj = cheb_projector(H, degree)
     vals = []
     for j in orbitals:
         e = np.zeros(len(X), complex); e[j] = 1.0
@@ -92,12 +126,13 @@ def central_orbitals(idx, L):
 
 if __name__ == "__main__":
     print("=" * 74)
-    print("AN INTEGER FROM NOISE — the Chern marker via three Krylov chains/site")
+    print("AN INTEGER FROM NOISE — the Chern marker via three Chebyshev chains/site")
     print("=" * 74)
     L = 12
     m_triv = T2 * 3 * np.sqrt(3) * 1.5
     print(f"\n  Haldane model, open {L}x{L} lattice (N={2 * L * L}), marker at the bulk")
-    print(f"  centre; P = θ(−H) is ONE resona.apply per chain (k=160).\n")
+    print(f"  centre; P = θ(−H) is a degree-500 Jackson/Chebyshev polynomial —")
+    print(f"  the KPM measure as an operator, coefficients computed once.\n")
     print(f"    {'phase':>34} {'marker C':>10} {'expected':>9}")
     for name, phi, m, exp_C in [
             ("trivial  (m = 1.5·m_c)", np.pi / 2, m_triv, " 0"),
@@ -107,24 +142,24 @@ if __name__ == "__main__":
         t0 = time.perf_counter()
         C = chern_marker(H, X, Y, central_orbitals(idx, L))
         print(f"    {name:>34} {C:+10.4f} {exp_C:>9}   [{time.perf_counter()-t0:.0f}s]")
-    print(f"\n    (sign convention: marker = −C of the band below μ; ±0.92 at L=12 is")
+    print(f"\n    (sign convention: marker = −C of the band below μ; ±0.93 at L=12 is")
     print(f"     the finite-size value — see the sweep — while the trivial phase is")
     print(f"     EXACTLY zero: topology does not do 'almost'.)")
 
     if "--sweep" in sys.argv:
         print(f"\n  convergence to the integer (topological phase, φ=+π/2):")
-        for Ls, ks in ((8, 120), (12, 160), (16, 200)):
+        for Ls, deg in ((12, 500), (16, 700), (20, 900)):
             H, X, Y, idx = haldane(Ls, m=0.1)
             t0 = time.perf_counter()
-            C = chern_marker(H, X, Y, central_orbitals(idx, Ls), k=ks)
+            C = chern_marker(H, X, Y, central_orbitals(idx, Ls), degree=deg)
             print(f"    L={Ls:2d} (N={2*Ls*Ls:4d}): C = {C:+.4f}   [{time.perf_counter()-t0:.0f}s]")
-        print(f"    → 0.81 → 0.92 → 0.97: the marker walks to the integer as the")
+        print(f"    → 0.93 → 0.97 → 0.985: the marker walks to the integer as the")
         print(f"      bulk grows — the topology was never in doubt, only the boundary.")
 
     print("\n" + "=" * 74)
-    print("  A topological INTEGER, read by Lanczos chains from real space — no")
-    print("  diagonalization, no k-space, no Berry curvature integration.  The")
-    print("  trivial phase lands on 0 to four digits; the topological phases land")
-    print("  on ∓1 up to a finite-size deficit that dies with L.  Noise in, ")
-    print("  topology out.")
+    print("  A topological INTEGER, read by Chebyshev projector chains from real")
+    print("  space — no diagonalization, no k-space, no Berry curvature integral.")
+    print("  The trivial phase lands on 0 to four digits; the topological phases")
+    print("  land on ∓1 up to a finite-size deficit that dies with L (0.985 at")
+    print("  L=20).  Noise in, topology out.")
     print("=" * 74)

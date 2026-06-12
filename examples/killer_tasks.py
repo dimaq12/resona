@@ -24,7 +24,9 @@ def task_gp_logdet(N=700):
     X = rng.standard_normal((N, 3))
     D2 = ((X[:, None, :] - X[None, :, :]) ** 2).sum(-1)
     K = np.exp(-0.5 * D2) + 1e-2 * np.eye(N)                # RBF + jitter (PD)
-    s = Spectral.of(lambda v: K @ v, N, k=70, probes=24)
+    # deflate=64: the RBF kernel's spiked top — its largest 64 eigenpairs become
+    # EXACT atoms (Hutch++ at the measure level); SLQ carries only the flat rest
+    s = Spectral.of(lambda v: K @ v, N, k=70, probes=24, deflate=64)
     est = s.trace(lambda x: np.log(np.maximum(x, 1e-12)))
     true = np.linalg.slogdet(K)[1]
     print(f"   log|K|   resona = {est:>12.2f}   true = {true:>12.2f}   "

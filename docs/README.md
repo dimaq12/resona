@@ -3,6 +3,14 @@
 **First time here?** Take **[the tour](tour.md)** — ten stops, plain words
 first, the math second, from "what is a matvec" to synthesizing operators.
 
+**Or enter through your door** — half a page each, your first five tasks
+mapped to five calls:
+[quants & statisticians](personas/quant.md) ·
+[physicists](personas/physicist.md) ·
+[ML people](personas/ml.md) ·
+[dynamics & data](personas/dynamics.md) ·
+[numerical analysts](personas/numerical-analyst.md)
+
 Task-oriented guides: **find your task in the table, copy the recipe, follow the
 guide, read the full example.**  Every recipe is matrix-free unless noted — you
 supply a `matvec` (a function `v → A·v`), never a matrix.

@@ -23,18 +23,23 @@ WHAT WE DO INSTEAD.  Given the resona spectrum object s = resona.of(matvec, D):
 All thermodynamic quantities from ONE call to resona.of() — one SLQ pass,
 O(probes·k·D) cost, O(D) memory.  No diagonalization.
 
-WHY THIS WORKS.  resona.trace(f) = N · Σ_k w_k f(node_k) evaluates Tr f(H)
-exactly for the SLQ polynomial representation.  For smooth f = exp(-β·λ) the
-quadrature is highly accurate at high and moderate T.  At very low T (β ≫ 1/E_gap)
-only the ground-state sector contributes; this is also where resona is most
-accurate (Lanczos preferentially resolves extremes).
+WHY THIS WORKS — AND THE ONE TRICK THAT MATTERS.  resona.trace(f) =
+N · Σ_k w_k f(node_k) evaluates Tr f(H) exactly for the SLQ polynomial
+representation; for smooth f = exp(−βλ) the quadrature is accurate at high
+and moderate T.  But at low T the trace is DOMINATED by the few lowest
+levels, and a stochastic measure resolves them only statistically.  The fix
+is one keyword: hand resona −H with `deflate=24` — the top-24 Ritz pairs of
+−H are H's 24 LOWEST levels, which deflate makes EXACT atoms in the measure
+(Hutch++ at the measure level); the random probes then carry only the
+smooth bulk remainder.  Measured effect on max Z error (the EPIC3 retrofit):
+19.4% → 0.09% at L=8, 16.3% → 0.67% at L=12.
 
 THE L=20 FRAMING.  eigh at L=20: 8 TB matrix, 10¹⁸ FLOP — eigh is infeasible.
-resona at L=20: k=48 probes=8 → ~3.2×10⁸ matvec FLOP, ~8 MB memory.
+resona at L=20: k=48 probes=4 deflate=12 → ~10¹⁰ matvec FLOP, ~25 MB memory.
 
-VALIDATION.  We verify against exact eigvalsh at L=8 and L=10 where eigh is
-feasible.  Thermodynamic quantities agree within ~1-3% at intermediate T;
-high-T agreement is excellent, very-low-T is Lanczos-accurate.
+VALIDATION.  We verify against exact eigvalsh at L=8/10/12 where eigh is
+feasible.  Z to ~0.1–0.7%, E to ~1%, Cv to ~3–7% across the β grid —
+strictly better than the pre-deflate version on every metric at every L.
 
 Run:  python3 examples/quantum/heisenberg_thermo.py
 """
@@ -67,11 +72,16 @@ def build_heisenberg(L):
     return (sp.diags(diag) + Hoff).tocsr()
 
 
-def thermo_from_resona(s, betas):
-    """Compute Z, F, E, S, Cv from resona spectrum object s."""
-    Z   = np.array([s.trace(lambda l, b=b: np.exp(-b * l))         for b in betas])
-    EZ  = np.array([s.trace(lambda l, b=b: l * np.exp(-b * l))     for b in betas])
-    E2Z = np.array([s.trace(lambda l, b=b: l**2 * np.exp(-b * l))  for b in betas])
+def thermo_from_resona(s, betas, sign=1.0):
+    """Compute Z, F, E, S, Cv from resona spectrum object s.
+
+    sign=−1 means s was built from −H (the deflate-the-ground-state trick):
+    every trace then reads f(sign·λ), so the formulas below are unchanged.
+    """
+    g = sign
+    Z   = np.array([s.trace(lambda l, b=b: np.exp(-b * g * l))              for b in betas])
+    EZ  = np.array([s.trace(lambda l, b=b: (g * l) * np.exp(-b * g * l))    for b in betas])
+    E2Z = np.array([s.trace(lambda l, b=b: (g * l)**2 * np.exp(-b * g * l)) for b in betas])
     E_mean  = EZ  / Z
     E2_mean = E2Z / Z
     T = 1.0 / betas
@@ -123,8 +133,11 @@ if __name__ == "__main__":
         th_ex = thermo_exact(evals, betas)
 
         t0 = time.perf_counter()
-        s = resona.of(matvec, D, k=64, probes=12)
-        th_re = thermo_from_resona(s, betas)
+        # e^{−βH} lives at the BOTTOM of the spectrum; deflate captures the TOP —
+        # so resona gets −H: its top-24 Ritz pairs are H's 24 lowest levels, made
+        # EXACT atoms in the measure; SLQ carries only the smooth bulk remainder.
+        s = resona.of(lambda v, H=H: -(H @ v), D, k=64, probes=24, deflate=24)
+        th_re = thermo_from_resona(s, betas, sign=-1.0)
         dt_ms = (time.perf_counter() - t0) * 1e3
 
         # Relative errors — only at moderate T where signals are non-negligible
@@ -148,9 +161,9 @@ if __name__ == "__main__":
 
     H10 = build_heisenberg(10)
     evals10 = np.sort(np.linalg.eigvalsh(H10.toarray()))
-    s10 = resona.of(lambda v: H10 @ v, H10.shape[0], k=64, probes=12)
+    s10 = resona.of(lambda v: -(H10 @ v), H10.shape[0], k=64, probes=24, deflate=24)
     th_ex10 = thermo_exact(evals10, betas)
-    th_re10 = thermo_from_resona(s10, betas)
+    th_re10 = thermo_from_resona(s10, betas, sign=-1.0)
     for i in range(0, len(betas), 5):
         T = 1.0 / betas[i]
         print(f"  {T:>7.3f}  {th_ex10['E'][i]:>8.4f}  {th_re10['E'][i]:>8.4f}  "
@@ -168,10 +181,10 @@ if __name__ == "__main__":
         H = build_heisenberg(L)
         matvec = lambda v, H=H: H @ v
         t0 = time.perf_counter()
-        s = resona.of(matvec, D, k=48, probes=4)   # fewer probes for speed at large D
-        E0 = s.extreme()[0]
+        s = resona.of(lambda v, H=H: -(H @ v), D, k=48, probes=4, deflate=12)
+        E0 = -s.extreme()[1]                       # top of −H = ground state of H
         betas_spot = np.array([2.0])   # T=0.5
-        th_spot = thermo_from_resona(s, betas_spot)
+        th_spot = thermo_from_resona(s, betas_spot, sign=-1.0)
         dt = time.perf_counter() - t0
         print(f"  {L:>3}  {D:>8}  {E0:>8.4f}  {th_spot['E'][0]:>10.4f}  "
               f"{th_spot['Cv'][0]:>11.4f}  {th_spot['S'][0]:>10.4f}  {dt:>6.1f}s")
