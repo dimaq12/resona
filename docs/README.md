@@ -1,5 +1,8 @@
 # resona — how-to (the cookbook)
 
+**First time here?** Take **[the tour](tour.md)** — ten stops, plain words
+first, the math second, from "what is a matvec" to synthesizing operators.
+
 Task-oriented guides: **find your task in the table, copy the recipe, follow the
 guide, read the full example.**  Every recipe is matrix-free unless noted — you
 supply a `matvec` (a function `v → A·v`), never a matrix.
