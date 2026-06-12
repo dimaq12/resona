@@ -219,7 +219,11 @@ on Odlyzko's published tables — first 100k zeros, zeros #10^12+…, #10^21+…
   law; the absolute constant carries the δ-convention).  That is ln 2 × the
   wavelength of the prime-2 periodic orbit, Λ₂ = ln(t/2π)/ln 2 — Berry's
   saturation, recovered from public data with a 0.5-second script.  The plateau
-  follows his (1/π²)·ln ln t to ±0.02.
+  follows his (1/π²)·ln ln t to ±0.02.  **And the law interpolates** (EPIC3,
+  zeros6 = the first 2,001,052 zeros): 14 sliding 50k-zero windows across
+  t ≈ 2·10⁴ … 1.1·10⁶ fit  L_sat = 0.98·ln(t/2π) − 0.8  with R² = 0.945
+  (ratio 0.904 ± 0.030) — a continuous band through the lowest historic
+  point, same criterion, same constant: the law is a line, not three dots.
 
 *Honest:* all three are numerical observations with controls and error bars on
 classical objects (Berry 1988; Odlyzko 1987; Montgomery–Odlyzko) — the
