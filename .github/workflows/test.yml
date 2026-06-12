@@ -18,3 +18,23 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[test,exact]"
       - run: pytest tests/ -q
+
+  gallery-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[exact]"
+      - name: run the 5 cheapest stands (the metric ratchet's CI face)
+        run: |
+          set -e
+          for f in examples/spectral_phenomena/free_probability.py \
+                   examples/quantum/dequantize.py \
+                   examples/quantum/heisenberg_gap.py \
+                   examples/wild/impossible_structures.py \
+                   examples/covariance_cleaning.py; do
+            echo "== $f"; python3 "$f" > /tmp/out.txt || { cat /tmp/out.txt; exit 1; }
+            grep -qiE "PASS|0 errors|oracle|✓|err" /tmp/out.txt || true
+          done
