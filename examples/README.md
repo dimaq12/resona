@@ -74,6 +74,7 @@ python3 examples/<dir>/<name>.py
 | 🎯 `maxwell_4_3.py` | the 4/3 EM-mass paradox as a spectral signature | ratio 1.333333 (caveat: scaling not rank-drop) |
 | `dark_matter_rotation.py` | NGC 3198 rotation curve: Newton vs MOND vs halo | recovered a₀=1.15e-10 (Milgrom 1.2e-10) |
 | 🎯 `hilbert_polya.py` | THE zeta-zero operator: built, verified, interrogated | eig=zeros to 2.8e-13; Weyl corr 0.9996; ⟨r⟩ 0.615 vs GUE ctrl 0.590; β-fluct 1.42x smoother than GUE |
+| 🎯 `zeta_ascent.py` | Odlyzko's ascent: 100k zeros + #10^12 + #10^21 through two dials | ⟨r⟩=0.6000 at #10^12 (4 digits); β-rigidity excess decays 1.42x→1.06x |
 
 ## wild/ — for fun (still honest)
 | file | what | metric |

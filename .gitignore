@@ -7,3 +7,4 @@ dist/
 .venv/
 *.so
 .audit/
+examples/science/data/
