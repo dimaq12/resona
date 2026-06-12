@@ -21,6 +21,7 @@ python3 examples/<dir>/<name>.py
 | `inverse_spectral.py` | hear the shape of an operator — the inverse of `of` (`from_measure`) | recover 3e-7; eigenvalues-alone fail |
 | `signals.py`, `image_anomaly.py` | spectral analysis of 1D signals / images | — |
 | 🎯 `covariance_cleaning.py` | FREE DECONVOLUTION: un-add MP noise from a sample covariance (RIE) | 1.81x closer, 95% of oracle; risk self-deception 4.15x → 0.94x |
+| 🎯 `certified_logdet.py` | Gauss–Radau brackets: the answer PROVABLY inside | GP variance certified, width →3.8e-4; truncation vs scatter separated |
 
 ## quantum/ — one dial (Φ₁), many problems · [details](quantum/README.md)
 | file | what | metric |
@@ -36,6 +37,8 @@ python3 examples/<dir>/<name>.py
 | `syk_chaos.py` | SYK free vs maximally-chaotic via self-averaging | CV gap +20% (correct direction) |
 | `heisenberg_thermo.py` | full thermodynamics Z,F,E,S,Cv from the spectrum | E err 0.6% @ L=10; L=20 = 9 TB for eigh |
 | 🎯 `integrability_detector.py` | is it integrable? ⟨r⟩ + blind conserved-charge search | ⟨r⟩ 0.392/0.532 (refs .386/.531); 4 vs 1 charges |
+| 🎯 `chern_from_noise.py` | a topological INTEGER from Krylov chains (Haldane, real space) | trivial: 0.0000 exact; topological ±0.92→±0.97 with L |
+| `thermal_response.py` | S(ω) by typicality where dense dies (L=14, D=16384) | L=8 calibration printed; sum rule C(0)=⟨O²⟩ agrees |
 
 ## graphs/
 | file | what | metric |
@@ -58,6 +61,7 @@ python3 examples/<dir>/<name>.py
 | 🎯 `defect_sort.py` | the defect IS the sorting operator (+ its pseudospectrum) | **0 mismatches** vs np.sort; bloom ε^{1/q} exact |
 | 🎯 `nonnormal_convergence.py` | GMRES follows the PSEUDOspectrum, not the spectrum | same spectrum: 14 iters vs stall; σ_min 1e-9 |
 | 🎯 `operator_synthesis.py` | SYNTHESIZE operators: design a measure (bands, ⊞, flow) → realize a tridiagonal matvec | eig = order to **5.6e-15**; gap dip 0.054; two materials from one knob |
+| 🎯 `isospectral_drums.py` | Kac executable: identical spectra, local_spectrum hears the shape | spectra equal to 1e-15; local profiles differ |
 | 🎯 `universal_solver.py` | precompute the response field → instant solves (harvest) | 10,000 solves, **2.6e-15** residual |
 | `arithmetic_manifold.py` | 12 bit-ops self-cluster by spectral fingerprint | silhouette 0.40 (partial, honest) |
 | 🎯 `affine_flow.py` | exact exp(dt·J) flow for stiff/non-normal ODEs (`apply`) | accuracy 38–141× BE (timing caveat) |
@@ -75,6 +79,7 @@ python3 examples/<dir>/<name>.py
 | `dark_matter_rotation.py` | NGC 3198 rotation curve: Newton vs MOND vs halo | recovered a₀=1.15e-10 (Milgrom 1.2e-10) |
 | 🎯 `hilbert_polya.py` | THE zeta-zero operator: built, verified, interrogated | eig=zeros to 2.8e-13; Weyl corr 0.9996; ⟨r⟩ 0.615 vs GUE ctrl 0.590; β-fluct 1.42x smoother than GUE |
 | 🎯 `zeta_ascent.py` | Odlyzko's ascent: 100k zeros + #10^12 + #10^21 through two dials | ⟨r⟩=0.6000 at #10^12 (4 digits); β-rigidity excess decays 1.42x→1.06x |
+| 🎯 `koopman_dynamics.py` | your time series IS an operator (Koopman bridge) | odd-harmonic ladder to 7e-4 vs FFT; chaos rank grows ∝ window |
 
 ## wild/ — for fun (still honest)
 | file | what | metric |

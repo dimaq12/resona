@@ -37,10 +37,11 @@ matvec = lambda v: A @ v          # your operator, however you can apply it
 | resolve INTERIOR eigenvalues (spectrum slicing) | `s.zoom(a, b)` → polish nodes | [reading-spectra](reading-spectra.md) | [`spectra_to_machine_precision.py`](../examples/spectra_to_machine_precision.py) |
 | disorder-average a DOS (no realizations) | `resona.subordination.averaged_dos(sA,σ,xs)` | [composing-operators](composing-operators.md) | [`anderson_localization.py`](../examples/anderson_localization.py) |
 | CONSTRUCT an operator with a prescribed spectrum | inverse-CDF levels → `resona.from_measure(levels, 1/N)` | [inverse-problems](inverse-problems.md) | [`spectral_phenomena/operator_synthesis.py`](../examples/spectral_phenomena/operator_synthesis.py) |
-| probe a NON-HERMITIAN operator (Markov, Koopman, damping) | `resona.cloud(mv, N)` → `.radius() .abscissa() .nodes` | [reading-spectra](reading-spectra.md) | — |
-| turn a TIME SERIES into an operator | `mv, rmv, r = resona.lift.koopman(snapshots)` | [lifting-nonlinear](lifting-nonlinear.md) | — |
+| probe a NON-HERMITIAN operator (Markov, Koopman, damping) | `resona.cloud(mv, N)` → `.radius() .abscissa() .nodes` | [reading-spectra](reading-spectra.md) | [`science/koopman_dynamics.py`](../examples/science/koopman_dynamics.py) |
+| read a topological invariant matrix-free | P = `apply(H, step, v)` chains → Chern marker | [solving-and-evolving](solving-and-evolving.md) | [`quantum/chern_from_noise.py`](../examples/quantum/chern_from_noise.py) |
+| turn a TIME SERIES into an operator | `mv, rmv, r = resona.lift.koopman(snapshots)` | [lifting-nonlinear](lifting-nonlinear.md) | [`science/koopman_dynamics.py`](../examples/science/koopman_dynamics.py) |
 | thermal expectation ⟨O⟩_β matrix-free (typicality) | `resona.thermal.expect(Hmv, Omv, beta, N)` | [solving-and-evolving](solving-and-evolving.md) | — |
-| dynamical correlator ⟨O(t)O⟩_β / spectral function | `resona.thermal.correlator(Hmv, Omv, beta, ts, N)` | [solving-and-evolving](solving-and-evolving.md) | — |
+| dynamical correlator ⟨O(t)O⟩_β / spectral function | `resona.thermal.correlator(Hmv, Omv, beta, ts, N)` | [solving-and-evolving](solving-and-evolving.md) | [`quantum/thermal_response.py`](../examples/quantum/thermal_response.py) |
 | recover the operator from its spectrum | `resona.from_eigenbasis(λ,V)` / `from_measure(λ,w)` | [inverse-problems](inverse-problems.md) | [`inverse_spectral.py`](../examples/inverse_spectral.py) |
 | design parameters to hit a target spectrum | `resona.wkernel.design(W, Δλ, reg=…)` | [inverse-problems](inverse-problems.md) | [`graphs/inverse_graph_design.py`](../examples/graphs/inverse_graph_design.py) |
 | linearize a nonlinear ODE / logic function | `resona.lift.carleman_scalar / carleman_gf` | [lifting-nonlinear](lifting-nonlinear.md) | [`logic/`](../examples/logic/) |

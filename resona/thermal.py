@@ -63,19 +63,35 @@ def correlator(Hmv, Omv, beta, ts, N, probes=4, k=64, seed=0):
     hermitian=False) — O(len(ts) · probes · k) matvecs.  FFT C(t) for the
     spectral function S(ω)."""
     ts = np.asarray(ts, float)
+    dts = np.diff(ts)
+    uniform = len(ts) > 1 and np.allclose(dts, dts[0])
     out = np.zeros((probes, len(ts)), complex)
     wts = np.zeros(probes)
     for p in range(probes):
         psi, w = state(Hmv, beta, N, seed=seed + p, k=k)
         wts[p] = w
         phi = np.asarray(Omv(psi), complex)
-        for i, t in enumerate(ts):
-            if t == 0.0:
-                psi_t, phi_t = psi.astype(complex), phi
-            else:
-                psi_t = apply(Hmv, lambda lam: np.exp(-1j * t * lam),
-                              psi.astype(complex), k=k, hermitian=False)
-                phi_t = apply(Hmv, lambda lam: np.exp(-1j * t * lam),
-                              phi, k=k, hermitian=False)
-            out[p, i] = np.vdot(psi_t, np.asarray(Omv(phi_t), complex))
+        if uniform:
+            # incremental stepping: ONE Δt-evolution per time point instead of
+            # evolving from t=0 each time — O(len(ts)) instead of O(len(ts)²)
+            # matvecs; per-step Krylov error ~1e-12 accumulates linearly and
+            # stays far below the typicality noise
+            dt = float(dts[0])
+            step = lambda v: apply(Hmv, lambda lam: np.exp(-1j * dt * lam),
+                                   v, k=k, hermitian=False)
+            psi_t, phi_t = psi.astype(complex), phi
+            for i, t in enumerate(ts):
+                if i > 0:
+                    psi_t, phi_t = step(psi_t), step(phi_t)
+                out[p, i] = np.vdot(psi_t, np.asarray(Omv(phi_t), complex))
+        else:
+            for i, t in enumerate(ts):
+                if t == 0.0:
+                    psi_t, phi_t = psi.astype(complex), phi
+                else:
+                    psi_t = apply(Hmv, lambda lam: np.exp(-1j * t * lam),
+                                  psi.astype(complex), k=k, hermitian=False)
+                    phi_t = apply(Hmv, lambda lam: np.exp(-1j * t * lam),
+                                  phi, k=k, hermitian=False)
+                out[p, i] = np.vdot(psi_t, np.asarray(Omv(phi_t), complex))
     return (out * wts[:, None]).sum(0) / wts.sum()
