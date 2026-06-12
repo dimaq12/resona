@@ -30,6 +30,9 @@ matvec = lambda v: A @ v          # your operator, however you can apply it
 | CLEAN a noisy sample covariance (free deconvolution / RIE) | `resona.free.rie_clean(eigs, q=N/T)` | [composing-operators](composing-operators.md) | [`covariance_cleaning.py`](../examples/covariance_cleaning.py) |
 | subtract additive noise from a spectrum | `resona.free.rie_clean_additive(eigs, σ)` | [composing-operators](composing-operators.md) | [`covariance_cleaning.py`](../examples/covariance_cleaning.py) |
 | get error bars on a stochastic trace | `s.trace(f, with_err=True)` | [reading-spectra](reading-spectra.md) | — |
+| get a CERTIFIED bracket (the answer provably inside) | `resona.quadform(mv, "inv", v, certified=True, support=(a,None))` | [precision-and-defects](precision-and-defects.md) | [`certified_logdet.py`](../examples/certified_logdet.py) |
+| certify the k-truncation of a trace estimate | `s.trace("log", certified=True, support=(a,None))` | [precision-and-defects](precision-and-defects.md) | [`certified_logdet.py`](../examples/certified_logdet.py) |
+| resolve INTERIOR eigenvalues (spectrum slicing) | `s.zoom(a, b)` → polish nodes | [reading-spectra](reading-spectra.md) | [`spectra_to_machine_precision.py`](../examples/spectra_to_machine_precision.py) |
 | disorder-average a DOS (no realizations) | `resona.subordination.averaged_dos(sA,σ,xs)` | [composing-operators](composing-operators.md) | [`anderson_localization.py`](../examples/anderson_localization.py) |
 | CONSTRUCT an operator with a prescribed spectrum | inverse-CDF levels → `resona.from_measure(levels, 1/N)` | [inverse-problems](inverse-problems.md) | [`spectral_phenomena/operator_synthesis.py`](../examples/spectral_phenomena/operator_synthesis.py) |
 | recover the operator from its spectrum | `resona.from_eigenbasis(λ,V)` / `from_measure(λ,w)` | [inverse-problems](inverse-problems.md) | [`inverse_spectral.py`](../examples/inverse_spectral.py) |

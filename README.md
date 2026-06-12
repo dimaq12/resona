@@ -72,6 +72,8 @@ each entry verified in `tests/` and `examples/` against dense ground truth:
 | `s.effective_rank()` | Φ₁ participation ratio; the Extraction-Law cost dial | dequantization boundary (Tang) |
 | `free.rie_clean` | free DEconvolution: Ledoit–Péché / Bun–Bouchaud–Potters RIE | 95% of the oracle at q=1/2 |
 | `s.trace(f, with_err=True)` | the stochastic estimate with its own standard error (probe scatter) | bars bracket truth, free |
+| `quadform(..., certified=True)` | Gauss–Radau brackets (Golub–Meurant): the answer PROVABLY inside | GP variance certified, width 4e-4 at k=24 |
+| `s.zoom(a, b)` | Chebyshev spectrum slicing: interior eigenvalues at full k-resolution | interior to 4e-16 of span |
 
 🔧 **Have a task right now?** The **[cookbook](https://github.com/dimaq12/resona/blob/main/docs/README.md)**: find your task
 in the "I want to…" table, copy the recipe.

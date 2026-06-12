@@ -21,7 +21,7 @@ Everything else is read off the same object:
 from __future__ import annotations
 import numpy as np
 
-__all__ = ["Spectral", "apply", "local_spectrum", "local_density", "from_measure", "from_eigenbasis"]
+__all__ = ["Spectral", "apply", "quadform", "local_spectrum", "local_density", "from_measure", "from_eigenbasis"]
 
 
 def _supports_block(matvec, N):
@@ -132,6 +132,104 @@ def _is_complex_operator(matvec, N):
         return True              # real test vector rejected → assume complex domain
 
 
+# f-families with sign-definite high derivatives on (0, ∞) — the Golub–Meurant
+# certificate set: (callable, which side plain Gauss lands on, which endpoint
+# the Radau rule must pin).  log/sqrt: f^(2k)<0 → Gauss OVER, Radau(a) under.
+# inv: f^(2k)>0, f^(2k+1)<0 → Gauss UNDER, Radau(a) over.  exp: all derivatives
+# positive → Gauss UNDER, Radau(b) over.
+_FAMS = {
+    "log":  (np.log,            "over",  "a"),
+    "sqrt": (np.sqrt,           "over",  "a"),
+    "inv":  (lambda x: 1.0 / x, "under", "a"),
+    "exp":  (np.exp,            "under", "b"),
+}
+
+
+def _resolve_f(f):
+    """Accept a callable or a family name ('log', 'inv', 'sqrt', 'exp')."""
+    if callable(f):
+        return f, None
+    if f in _FAMS:
+        return _FAMS[f][0], f
+    raise ValueError(f"unknown f family {f!r}; use a callable or one of {list(_FAMS)}")
+
+
+def _gauss_value(al, be, f):
+    kk = len(al)
+    T = np.diag(al) + np.diag(be[:kk - 1], 1) + np.diag(be[:kk - 1], -1)
+    th, S = np.linalg.eigh(T)
+    return float(np.sum(S[0, :] ** 2 * f(th))), float(th[0]), float(th[-1])
+
+
+def _radau_value(al, be, f, end):
+    """Gauss–Radau with the node pinned at `end`, built from the STORED
+    recurrence: T_{k-1} extended by one row via β_{k-1} (Golub–Meurant) —
+    zero extra matvecs."""
+    kk = len(al)
+    T = np.diag(al[:kk - 1]) + np.diag(be[:kk - 2], 1) + np.diag(be[:kk - 2], -1)
+    rhs = np.zeros(kk - 1); rhs[-1] = be[kk - 2] ** 2
+    delta = np.linalg.solve(T - end * np.eye(kk - 1), rhs)
+    al_ext = np.append(al[:kk - 1], end + delta[-1])
+    T2 = np.diag(al_ext) + np.diag(be[:kk - 1], 1) + np.diag(be[:kk - 1], -1)
+    th, S = np.linalg.eigh(T2)
+    return float(np.sum(S[0, :] ** 2 * f(th)))
+
+
+def _bracket(al, be, fam, support):
+    """Certified [lo, hi] for ∫f dμ of ONE unit-mass tridiagonal measure."""
+    func, side, which = _FAMS[fam]
+    if len(al) < 3:
+        raise ValueError("certified bounds need k >= 3 Lanczos steps")
+    g, th_lo, th_hi = _gauss_value(al, be, func)
+    a, b = (support if support is not None else (None, None))
+    if which == "a":
+        if a is None:
+            raise ValueError(f"f={fam!r} needs support=(a, ...) with a <= λ_min "
+                             "(e.g. a known shift/regularizer)")
+        if a >= th_lo or (fam in ("log", "sqrt", "inv") and a <= 0):
+            raise ValueError(f"support endpoint a={a} is not strictly below the "
+                             f"observed spectrum (Ritz min {th_lo:.6g}) and positive")
+        r = _radau_value(al, be, func, a)
+    else:
+        if b is None:
+            raise ValueError(f"f={fam!r} needs support=(..., b) with b >= λ_max")
+        if b <= th_hi:
+            raise ValueError(f"support endpoint b={b} is not strictly above the "
+                             f"observed spectrum (Ritz max {th_hi:.6g})")
+        r = _radau_value(al, be, func, b)
+    return (min(g, r), max(g, r))
+
+
+def quadform(matvec, f, v, k: int = 48, certified: bool = False, support=None):
+    """vᵀ f(A) v — the quadratic-form read (one Lanczos from v, matrix-free).
+
+    The certified twin of `apply`: with ``certified=True`` and f given as a
+    family name ('log', 'inv', 'sqrt', 'exp'), returns a RIGOROUS bracket
+    (lo, hi) via Gauss–Radau (Golub–Meurant) — and since a quadratic form has
+    NO stochastic probes, the bracket is an unconditional certificate, subject
+    only to the stated support endpoint (a <= λ_min for log/inv/sqrt — often
+    known structurally, e.g. a regularizer; b >= λ_max for exp).
+
+    Money case: GP posterior variance kᵀ(K+σ²I)⁻¹k with support=(σ², None).
+    """
+    func, fam = _resolve_f(f)
+    v = np.asarray(v)
+    nv2 = float(np.real(np.vdot(v, v)))
+    if np.iscomplexobj(v) or _is_complex_operator(matvec, len(v)):
+        al, be = _lanczos_herm(matvec, np.asarray(v, complex), k)
+    else:
+        al, be = _lanczos(matvec, np.asarray(v, float), k)
+    if not certified:
+        val, _, _ = _gauss_value(al, be, func)
+        return nv2 * val
+    if fam is None:
+        raise ValueError("certified=True needs f as a family name "
+                         f"({list(_FAMS)}), not a callable — derivative signs "
+                         "must be known for the bracket to be a theorem")
+    lo, hi = _bracket(al, be, fam, support)
+    return nv2 * lo, nv2 * hi
+
+
 class Spectral:
     """The response of an operator: Ritz nodes (the 'frequencies') and quadrature
     weights (the 'amplitudes'), harvested matrix-free by stochastic Lanczos
@@ -144,6 +242,7 @@ class Spectral:
         self.matvec = matvec
         self.N = N
         self.probe_sizes = probe_sizes      # per-probe node counts (error bars)
+        self._tridiags = None               # per-probe (α, β) when built by of()
 
     # ── PROBE (forward transform) ────────────────────────────────────────────
     @classmethod
@@ -182,8 +281,10 @@ class Spectral:
             theta, S = np.linalg.eigh(T)
             nodes.append(theta)
             weights.append(S[0, :] ** 2 / probes)
-        return cls(np.concatenate(nodes), np.concatenate(weights), matvec, N,
-                   probe_sizes=[len(th) for th in nodes])
+        obj = cls(np.concatenate(nodes), np.concatenate(weights), matvec, N,
+                  probe_sizes=[len(th) for th in nodes])
+        obj._tridiags = tridiags          # per-probe (α, β): certificates, zoom
+        return obj
 
     # ── COMPOSE (the free-convolution theorem: hard op → linear, matrix-free) ──
     def __add__(self, other: "Spectral") -> "Spectral":
@@ -225,13 +326,35 @@ class Spectral:
         return Spectral(nodes, weights, matvec=None, N=self.N)
 
     # ── READ (inverse transform: any spectral functional) ─────────────────────
-    def trace(self, f, with_err: bool = False):
+    def trace(self, f, with_err: bool = False, certified: bool = False,
+              support=None):
         """Tr f(A) = N · E[f(λ)] = N · Σ w·f(node).
 
         ``with_err=True`` → (value, stderr): the standard error of the
         stochastic estimate, read from the scatter of the independent probes
         (free — no extra matvecs).  The honest number, with its honest ±.
+
+        ``certified=True`` (f as a family name: 'log', 'inv', 'sqrt', 'exp';
+        plus ``support=(a, b)`` with the needed endpoint) → (lo, hi), the
+        Gauss–Radau bracket (Golub–Meurant) of the K-TRUNCATION error: the
+        fully-converged SLQ value of these same probes provably lies inside.
+        It does NOT certify the Monte-Carlo probe scatter — that is a separate
+        error source, reported by ``with_err``; the two are stated apart by
+        design.  For an unconditional certificate of a probe-free quantity,
+        see `quadform`.
         """
+        f, fam = _resolve_f(f)
+        if certified:
+            if fam is None:
+                raise ValueError("certified=True needs f as a family name "
+                                 f"({list(_FAMS)}), not a callable")
+            if not self._tridiags:
+                raise ValueError("certificates need the probe recurrences: "
+                                 "build this object with Spectral.of")
+            los, his = zip(*(_bracket(al, be, fam, support)
+                             for al, be in self._tridiags))
+            return float(self.N) * float(np.mean(los)), \
+                   float(self.N) * float(np.mean(his))
         vals = self.weights * f(self.nodes)
         total = float(self.N) * float(np.sum(vals))
         if not with_err:
@@ -303,6 +426,73 @@ class Spectral:
         gap never fills before t_max)."""
         from .flow import shock_time
         return shock_time(self, **kw)
+
+    def zoom(self, a, b, k: int = 48, probes: int = 8, degree: int = 200,
+             seed: int = 0) -> "Spectral":
+        """The spectral measure INSIDE the window [a, b] — interior eigenvalues
+        at full resolution, matrix-free (needs the carried matvec).
+
+        Chebyshev spectrum slicing: probes are filtered by a Jackson-damped
+        polynomial approximation p(A) of the window indicator (`degree`
+        matvecs per probe, applied by the bare three-term recurrence — no
+        inner Lanczos), then the standard Lanczos harvest runs from the
+        filtered probes, so its k-resolution is spent INSIDE the window
+        instead of on the global extremes.
+
+        Returns a `Spectral` whose weights carry the window measure, normalized
+        by the filter's exactly-known in-window p² gain — so
+        ``N * z.weights[(a<=z.nodes)&(z.nodes<=b)].sum()`` estimates the
+        EIGENVALUE COUNT in the window.  Polish individual nodes with
+        `solve.rayleigh_polish` for machine precision.
+
+        HONEST LIMIT: the filter has a transition band of width
+        ~(λmax−λmin)·π/degree around each edge — eigenvalues there enter with
+        partial weight; raise `degree` to sharpen.
+        """
+        if self.matvec is None:
+            raise ValueError("zoom needs the carried matvec")
+        lo, hi = self.extreme()
+        pad = 0.05 * (hi - lo) + 1e-12
+        lo, hi = lo - pad, hi + pad
+        c, w_half = 0.5 * (hi + lo), 0.5 * (hi - lo)
+        # Chebyshev coefficients of the indicator of [a, b], Jackson-damped
+        th = np.linspace(0.0, np.pi, 4096)
+        x = np.cos(th)
+        ind = ((c + w_half * x >= a) & (c + w_half * x <= b)).astype(float)
+        j = np.arange(degree + 1)
+        coef = np.trapezoid(ind[None, :] * np.cos(j[:, None] * th[None, :]),
+                            th, axis=1) * (2.0 / np.pi)
+        coef[0] *= 0.5
+        g = ((degree - j + 1) * np.cos(np.pi * j / (degree + 1))
+             + np.sin(np.pi * j / (degree + 1)) / np.tan(np.pi / (degree + 1)))
+        coef *= g / (degree + 1)                                  # Jackson kernel
+        p_grid = np.polynomial.chebyshev.chebval(x, coef)         # the filter, exactly
+        in_win = ind > 0
+        gain = float(np.mean(p_grid[in_win] ** 2))                # in-window p² mass
+
+        Amv = self.matvec
+        tilde = lambda v: (Amv(v) - c * v) / w_half               # map to [-1, 1]
+        rng = np.random.default_rng(seed)
+        nodes, weights, sizes, tris = [], [], [], []
+        for _ in range(probes):
+            v = rng.standard_normal(self.N)
+            t0, t1 = v, tilde(v)
+            wf = coef[0] * t0 + coef[1] * t1
+            for jj in range(2, degree + 1):                       # T_{j+1} = 2ÃT_j − T_{j−1}
+                t0, t1 = t1, 2.0 * tilde(t1) - t0
+                wf = wf + coef[jj] * t1
+            mass = float(wf @ wf) / float(v @ v)                  # ≈ ∫p² dμ
+            al, be = _lanczos(Amv, wf, k)
+            kk = len(al)
+            T = np.diag(al) + np.diag(be[:kk - 1], 1) + np.diag(be[:kk - 1], -1)
+            theta, S = np.linalg.eigh(T)
+            nodes.append(theta)
+            weights.append(S[0, :] ** 2 * (mass / gain) / probes)
+            sizes.append(len(theta)); tris.append((al, be))
+        out = Spectral(np.concatenate(nodes), np.concatenate(weights),
+                       self.matvec, self.N, probe_sizes=sizes)
+        out._tridiags = tris
+        return out
 
     # ── CLOSURE (whole spectrum from a few numbers) ────────────────────────────
     def levels(self, N: int = None):

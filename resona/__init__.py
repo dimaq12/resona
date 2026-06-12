@@ -17,13 +17,13 @@ matrix-free — and from which every spectral functional is read.
     resona.apply(matvec, f, v)     # APPLY   — f(A)·v: solve, evolve, filter
     resona.solve.rayleigh_polish   # PRECISION — spend effort only on the defect
 """
-from .spectral import Spectral, apply, local_spectrum, local_density, from_measure, from_eigenbasis
+from .spectral import Spectral, apply, quadform, local_spectrum, local_density, from_measure, from_eigenbasis
 from . import wkernel, lift, beta, defect, free, subordination, cost, flow, solve
 
 #: convenience: ``resona.of(matvec, N)`` == ``Spectral.of(matvec, N)``
 of = Spectral.of
 
 __version__ = "1.1.1"
-__all__ = ["Spectral", "of", "apply", "local_spectrum", "local_density",
+__all__ = ["Spectral", "of", "apply", "quadform", "local_spectrum", "local_density",
            "from_measure", "from_eigenbasis", "wkernel", "lift", "beta", "defect", "free",
            "subordination", "cost", "flow", "solve"]

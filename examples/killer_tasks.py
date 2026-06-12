@@ -29,6 +29,9 @@ def task_gp_logdet(N=700):
     true = np.linalg.slogdet(K)[1]
     print(f"   log|K|   resona = {est:>12.2f}   true = {true:>12.2f}   "
           f"rel.err = {abs(est-true)/abs(true):.2%}   (no Cholesky, matvec only)")
+    lo, hi = s.trace("log", certified=True, support=(1e-2, None))
+    print(f"   certified k-truncation bracket [{lo:.2f}, {hi:.2f}] (Gauss-Radau, "
+          f"width {hi-lo:.1e}; support = the jitter, known structurally)")
 
 
 # 2 ── Deep-learning Hessian spectrum  (sharpness, no Hessian formed) ──────────

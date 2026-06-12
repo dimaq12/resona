@@ -117,6 +117,25 @@ if __name__ == "__main__":
     print(f"    catastrophe_solve:       {dig(roots):>5.1f} correct digits  "
           f"(q={q} detected → {dps} dps spent)")
 
+    # ── ACT 3: INTERIOR eigenvalues with NO dense reference — s.zoom ─────────
+    # plain Lanczos resolves extremes; zoom spends the k-budget INSIDE a window.
+    # The window comes from s.extreme() (matrix-free); dense eig is VERIFY-only.
+    name, ic = next(iter(ics.items()))
+    A = tridiag(s2k(ic))
+    ev = np.sort(eigvalsh(A))                            # ground truth ONLY
+    s = resona.of(lambda v: A @ v, N, k=40, probes=4)
+    lo_s, hi_s = s.extreme()
+    a, b = lo_s + 0.475 * (hi_s - lo_s), lo_s + 0.525 * (hi_s - lo_s)
+    z = s.zoom(a, b, k=32, probes=6, degree=600)
+    picked = np.unique(np.round(
+        z.nodes[(z.nodes >= a) & (z.nodes <= b) & (z.weights > 1e-6)], 8))
+    errs3 = [np.min(np.abs(ev - resona.solve.rayleigh_polish(A, nd, iters=5)))
+             for nd in picked]
+    span = hi_s - lo_s
+    print(f"\n  ACT 3 — interior window ({name}, central 5% of the span, no dense seed):")
+    print(f"    zoom → {len(picked)} nodes → rayleigh_polish: max err = "
+          f"{max(errs3):.1e}  ({max(errs3)/span:.0e} of the span — machine grade)")
+
     print("\n" + "=" * 70)
     print("  resona's matrix-free Ritz values seed the spectrum; a few Rayleigh-quotient")
     print("  iterations (cubic) polish to machine precision — the sft35 pipeline, on the")

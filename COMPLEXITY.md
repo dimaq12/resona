@@ -15,6 +15,8 @@ slopes (measured `time ∝ N^s` on tridiagonal operators, N=64…512) are in **b
 | `apply(matvec,f,v,k)` | `O(k·C + k²·N)` (+`k³` Arnoldi) — **N^0.2** | matvec | ✓ | f(A)·v; solve/evolve |
 | `local_spectrum / local_density` | `O(k·C + k²·N)` | matvec, one probe | ✓ | one Lanczos from a chosen v |
 | `moment / trace / extreme / effective_rank / density` | `O(p·k)` | the nodes/weights | ✓ | reads of's output |
+| `trace(certified=True)` / `quadform(certified=True)` | `O(p·k³)` (Radau eigh per probe) | stored (α,β) | ✓ | rigorous Gauss–Radau brackets, zero extra matvecs |
+| `Spectral.zoom(a,b,degree)` | `O(p·(degree+k)·C)` | matvec | ✓ | Chebyshev slicing; transition band ~span·π/degree |
 | `free.freeness_defect / cross_moment` | `O(p·|word|·C)` | matvec | ✓ | Hutchinson |
 | `subordination.pastur` | `O(iters·N)` per z | spectrum (nodes,w) | ✓* | scalar fixed point |
 | `subordination.pastur_grid / averaged_dos / flow.burgers_density` | `O(iters·n_x·p·k)` vectorized | spectrum | ✓* | whole x-grid in ONE damped iteration with an active mask (~10× the scalar loop), same fixed point & tol |
