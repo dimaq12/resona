@@ -74,6 +74,8 @@ each entry verified in `tests/` and `examples/` against dense ground truth:
 | `s.trace(f, with_err=True)` | the stochastic estimate with its own standard error (probe scatter) | bars bracket truth, free |
 | `quadform(..., certified=True)` | Gauss–Radau brackets (Golub–Meurant): the answer PROVABLY inside | GP variance certified, width 4e-4 at k=24 |
 | `s.zoom(a, b)` | Chebyshev spectrum slicing: interior eigenvalues at full k-resolution | interior to 4e-16 of span |
+| `of(deflate=K)` | Hutch++ at the measure level: exact top-K atoms + complement probes | variance −63× (Tr A²), −724× (Tr eᴬ) |
+| `of(engine="kpm")` | Chebyshev/Jackson harvest, no reorthogonalization | 2.7× at k=256, same object out |
 
 🔧 **Have a task right now?** The **[cookbook](https://github.com/dimaq12/resona/blob/main/docs/README.md)**: find your task
 in the "I want to…" table, copy the recipe.

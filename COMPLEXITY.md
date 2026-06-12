@@ -12,6 +12,8 @@ slopes (measured `time ∝ N^s` on tridiagonal operators, N=64…512) are in **b
 | method | time | data | matrix-free | notes |
 |--------|------|------|:-----------:|-------|
 | `of(matvec,N,k,p)` | `O(p·k·C + p·k²)` — **N^0.2 (flat)** | matvec | ✓ | SLQ; cost is the matvec, not N.  If the matvec maps blocks (`A@X`, verified automatically, N≥1000), all p probes ride ONE block matvec per step — BLAS-3, ~2–4× measured |
+| `of(..., deflate=K)` | + one padded Lanczos `O((K+16)·C)` | matvec | ✓ | Hutch++ at the measure level: top-K exact atoms + complement probes.  Measured variance drop on spiked operators: **63× (Tr A²), 724× (Tr e^A)**; ~1× for log-flattened f — `effective_rank` predicts the gain |
+| `of(..., engine="kpm")` | `O(p·4k·C)` matvecs, **no reorth** (the `p·k²·N` term vanishes) | matvec | ✓ | Chebyshev/Jackson harvest → same `Spectral` via the measure's recurrence.  Wins at high resolution: **2.7× at k=256** with equal-or-better moments; edges smoothed ~span/(4k); no certificates |
 | `apply(matvec,f,v,k)` | `O(k·C + k²·N)` (+`k³` Arnoldi) — **N^0.2** | matvec | ✓ | f(A)·v; solve/evolve |
 | `local_spectrum / local_density` | `O(k·C + k²·N)` | matvec, one probe | ✓ | one Lanczos from a chosen v |
 | `moment / trace / extreme / effective_rank / density` | `O(p·k)` | the nodes/weights | ✓ | reads of's output |

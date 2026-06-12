@@ -123,6 +123,79 @@ def _lanczos_herm(matvec, v0, k):
     return alpha, beta
 
 
+def _topk_pairs(matvec, N, K, extra=None, seed=0):
+    """Top-K Ritz pairs (values, vectors) from one Lanczos with a stored basis
+    (extremes converge first — Kaniel–Paige).  Used by `of(deflate=K)`."""
+    extra = extra if extra is not None else max(16, K // 2)
+    k = K + extra
+    rng = np.random.default_rng(seed + 7919)
+    V = np.zeros((N, k)); al = np.zeros(k); be = np.zeros(k)
+    q = rng.standard_normal(N); q /= np.linalg.norm(q)
+    V[:, 0] = q; qp = np.zeros(N); b = 0.0
+    for j in range(k):
+        w = matvec(q) - b * qp
+        al[j] = float(q @ w); w = w - al[j] * q
+        w -= V[:, :j + 1] @ (V[:, :j + 1].T @ w)
+        if j < k - 1:
+            b = float(np.linalg.norm(w))
+            if b < 1e-12:
+                k = j + 1; break
+            be[j] = b; qp, q = q, w / b; V[:, j + 1] = q
+    T = np.diag(al[:k]) + np.diag(be[:k - 1], 1) + np.diag(be[:k - 1], -1)
+    th, S = np.linalg.eigh(T)
+    idx = np.argsort(th)[-K:]
+    return th[idx], V[:, :k] @ S[:, idx]
+
+
+def _kpm_tridiags(matvec, N, k, probes, rng, block):
+    """KPM harvest: Chebyshev moments (NO reorthogonalization — the O(N·k²)
+    term vanishes, stable at thousands of moments), Jackson-damped density per
+    probe, Gauss nodes via the measure's own recurrence (`from_measure`).
+    Returns the per-probe (α, β) list, same contract as the Lanczos engines."""
+    M = max(4 * k, 256)                                   # moment count
+    s0_tris = [_lanczos(matvec, rng.standard_normal(N), 12) for _ in range(2)]
+    ths = np.concatenate([np.linalg.eigvalsh(np.diag(al) + np.diag(be[:len(al) - 1], 1)
+                                             + np.diag(be[:len(al) - 1], -1))
+                          for al, be in s0_tris])
+    lo, hi = ths.min(), ths.max()
+    pad = 0.06 * (hi - lo) + 1e-12
+    lo, hi = lo - pad, hi + pad
+    c, h = 0.5 * (hi + lo), 0.5 * (hi - lo)
+    jj = np.arange(M + 1)
+    g = ((M - jj + 1) * np.cos(np.pi * jj / (M + 1))
+         + np.sin(np.pi * jj / (M + 1)) / np.tan(np.pi / (M + 1))) / (M + 1)
+    G = 2048
+    xs = np.cos((np.arange(G) + 0.5) * np.pi / G)
+    Tj = np.cos(jj[:, None] * np.arccos(xs[None, :]))
+    Vp = rng.standard_normal((N, probes))
+    Vp /= np.linalg.norm(Vp, axis=0)
+    MU = np.empty((M + 1, probes))
+    if block:
+        tilde = lambda X: (matvec(X) - c * X) / h
+        T0, T1 = Vp, tilde(Vp)
+        MU[0] = np.einsum('np,np->p', Vp, T0)
+        MU[1] = np.einsum('np,np->p', Vp, T1)
+        for m in range(2, M + 1):
+            T0, T1 = T1, 2.0 * tilde(T1) - T0
+            MU[m] = np.einsum('np,np->p', Vp, T1)
+    else:
+        tilde = lambda v: (matvec(v) - c * v) / h
+        for p in range(probes):
+            v = Vp[:, p]
+            t0, t1 = v, tilde(v)
+            MU[0, p] = v @ t0; MU[1, p] = v @ t1
+            for m in range(2, M + 1):
+                t0, t1 = t1, 2.0 * tilde(t1) - t0
+                MU[m, p] = v @ t1
+    tridiags = []
+    for p in range(probes):
+        coef = MU[:, p] * g; coef[1:] *= 2.0
+        w = np.clip((coef[:, None] * Tj).sum(0), 0.0, None) / G
+        w /= w.sum()
+        tridiags.append(from_measure(c + h * xs, w, k=k))
+    return tridiags
+
+
 def _is_complex_operator(matvec, N):
     """One deterministic matvec: does the operator live on C^N?"""
     x = np.cos(np.arange(N) * 0.7) + 0.1
@@ -243,10 +316,12 @@ class Spectral:
         self.N = N
         self.probe_sizes = probe_sizes      # per-probe node counts (error bars)
         self._tridiags = None               # per-probe (α, β) when built by of()
+        self._slq_scale = 1.0               # complement mass (deflate)
+        self._n_atoms = 0                   # exact deflated atoms at the tail
 
     # ── PROBE (forward transform) ────────────────────────────────────────────
     @classmethod
-    def of(cls, matvec, N, k=48, probes=8, seed=0):
+    def of(cls, matvec, N, k=48, probes=8, seed=0, engine="lanczos", deflate=0):
         """Harvest the response of the operator given by `matvec` (acts on R^N,
         or on C^N for a complex HERMITIAN operator — detected automatically;
         complex probes are used and the read side is unchanged).
@@ -257,33 +332,82 @@ class Spectral:
         If `matvec` also maps (N, m) blocks column-wise (verified automatically,
         e.g. a dense/sparse ``A @ x``), all probes advance in ONE block matvec
         per step — BLAS-3, ~3× faster, the same probe vectors and the same math.
+
+        ``deflate=K`` (Hutch++ at the measure level): the top-K Ritz pairs are
+        captured EXACTLY (one padded Lanczos) and enter as atoms; the probes are
+        projected onto the complement.  For spiked operators and top-weighted f
+        the trace variance collapses (measured: 63× on Tr A², 724× on Tr e^A);
+        for f that flattens the top (log) the gain is ~1 — `effective_rank` is
+        the dial that predicts it.  Real symmetric operators only.
+
+        ``engine="kpm"``: Chebyshev/Jackson harvest — no reorthogonalization
+        (the O(N·k²) term vanishes), 4·k moments, the same `Spectral` out (the
+        measure's own recurrence via `from_measure`).  Wins at HIGH resolution
+        (k ≳ 200, measured 2.7× at k=256 with equal-or-better moments); edges
+        are smoothed by ~span/(4k) (Jackson) — certificates and `extreme` near
+        sharp edges want the default engine.  Real symmetric only.
         """
         rng = np.random.default_rng(seed)
-        if _is_complex_operator(matvec, N):
+        mv, atoms, scale, proj = matvec, None, 1.0, None
+        if deflate:
+            if engine != "lanczos":
+                raise ValueError("deflate requires the lanczos engine")
+            if _is_complex_operator(matvec, N):
+                raise ValueError("deflate: real symmetric operators only (for now)")
+            lam, W = _topk_pairs(matvec, N, deflate, seed=seed)
+            proj = lambda X: X - W @ (W.T @ X)
+            mv = lambda X: proj(matvec(proj(X)))
+            atoms, scale = lam, (N - deflate) / N
+        certifiable = True
+        if engine == "kpm":
+            if _is_complex_operator(mv, N):
+                raise ValueError("engine='kpm': real symmetric operators only")
+            tridiags = _kpm_tridiags(mv, N, k, probes, rng,
+                                     block=_supports_block(mv, N))
+            certifiable = False                # KPM recurrences describe the
+        elif engine != "lanczos":              # SMOOTHED measure — no theorems
+            raise ValueError(f"unknown engine {engine!r}: 'lanczos' or 'kpm'")
+        elif _is_complex_operator(mv, N):
             # complex HERMITIAN operator: complex Gaussian probes, complex
             # Lanczos — the tridiagonal (and the whole read side) stays real
-            tridiags = [_lanczos_herm(matvec,
+            tridiags = [_lanczos_herm(mv,
                                       (rng.standard_normal(N)
                                        + 1j * rng.standard_normal(N)) / np.sqrt(2), k)
                         for _ in range(probes)]
         # block pays when the matvec dominates the per-step bookkeeping: measured
         # crossover ~N=1000 (4× faster at N≥2000, ~even below)
-        elif probes > 1 and N >= 1000 and _supports_block(matvec, N):
+        elif probes > 1 and N >= 1000 and _supports_block(mv, N):
             V0 = rng.standard_normal((probes, N)).T          # same draws as the loop
-            tridiags = _lanczos_block(matvec, V0, k)
+            if proj is not None:
+                V0 = proj(V0)                  # probes live in the complement
+            tridiags = _lanczos_block(mv, V0, k)
         else:
-            tridiags = [_lanczos(matvec, rng.standard_normal(N), k)
-                        for _ in range(probes)]
+            draws = (rng.standard_normal(N) for _ in range(probes))
+            tridiags = [_lanczos(mv, proj(v) if proj is not None else v, k)
+                        for v in draws]
         nodes, weights = [], []
         for al, be in tridiags:
             kk = len(al)
             T = np.diag(al) + np.diag(be[:kk - 1], 1) + np.diag(be[:kk - 1], -1)
             theta, S = np.linalg.eigh(T)
+            w = S[0, :] ** 2 * (scale / probes)
+            if deflate:
+                # rounding leaks ~1e-16 of each probe back into the deflated
+                # span; it surfaces as massless nodes near 0 that can poison
+                # f (log of a stray negative).  Mass dropped here: < k·1e-14.
+                keep = w > 1e-14
+                theta, w = theta[keep], w[keep]
             nodes.append(theta)
-            weights.append(S[0, :] ** 2 / probes)
+            weights.append(w)
+        sizes = [len(th) for th in nodes]
+        if atoms is not None:
+            nodes.append(np.sort(atoms))
+            weights.append(np.full(len(atoms), 1.0 / N))     # exact top-K atoms
         obj = cls(np.concatenate(nodes), np.concatenate(weights), matvec, N,
-                  probe_sizes=[len(th) for th in nodes])
-        obj._tridiags = tridiags          # per-probe (α, β): certificates, zoom
+                  probe_sizes=sizes)
+        obj._tridiags = tridiags if certifiable else None    # certificates, zoom
+        obj._slq_scale = scale
+        obj._n_atoms = 0 if atoms is None else len(atoms)
         return obj
 
     # ── COMPOSE (the free-convolution theorem: hard op → linear, matrix-free) ──
@@ -350,11 +474,17 @@ class Spectral:
                                  f"({list(_FAMS)}), not a callable")
             if not self._tridiags:
                 raise ValueError("certificates need the probe recurrences: "
-                                 "build this object with Spectral.of")
+                                 "build this object with Spectral.of "
+                                 "(lanczos engine — KPM's recurrences describe "
+                                 "the smoothed measure, no theorems there)")
             los, his = zip(*(_bracket(al, be, fam, support)
                              for al, be in self._tridiags))
-            return float(self.N) * float(np.mean(los)), \
-                   float(self.N) * float(np.mean(his))
+            n_at = getattr(self, "_n_atoms", 0)
+            scale = getattr(self, "_slq_scale", 1.0)
+            atom_part = (float(self.N) * float(np.sum(
+                self.weights[-n_at:] * f(self.nodes[-n_at:]))) if n_at else 0.0)
+            return (float(self.N) * scale * float(np.mean(los)) + atom_part,
+                    float(self.N) * scale * float(np.mean(his)) + atom_part)
         vals = self.weights * f(self.nodes)
         total = float(self.N) * float(np.sum(vals))
         if not with_err:
@@ -367,6 +497,8 @@ class Spectral:
         for sz in self.probe_sizes:
             ests.append(float(self.N) * p * float(np.sum(vals[i:i + sz])))
             i += sz
+        atom_part = float(self.N) * float(np.sum(vals[i:]))   # deflate atoms:
+        ests = [e + atom_part for e in ests]                  # exact, zero scatter
         stderr = float(np.std(ests, ddof=1) / np.sqrt(p))
         return total, stderr
 
