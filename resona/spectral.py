@@ -609,8 +609,31 @@ def _bracket(al, be, fam, support):
     return (min(g, r), max(g, r))
 
 
+def _as_operator(A, N=None):
+    """(matvec, N) from whatever the caller has: a bare matvec callable, a
+    scipy.sparse.linalg.LinearOperator, a scipy sparse matrix, or an ndarray.
+
+    The ONE interop shim (1.4.x): anything with a `.shape` is treated as an
+    operator object and applied via `.matvec`/`@`; a bare callable stays the
+    bare callable it always was (bit-identical path) and needs N."""
+    if callable(A) and not hasattr(A, "shape"):
+        if N is None:
+            raise ValueError("a bare matvec callable needs N (the dimension); "
+                             "operator objects (LinearOperator / sparse / "
+                             "ndarray) carry it in .shape")
+        return A, int(N)
+    n = int(A.shape[0])
+    if N is not None and int(N) != n:
+        raise ValueError(f"N={N} contradicts the operator's shape {A.shape}")
+    mv = A.matvec if hasattr(A, "matvec") else (lambda v, A=A: A @ v)
+    return mv, n
+
+
 def quadform(matvec, f, v, k: int = 48, certified: bool = False, support=None):
     """vᵀ f(A) v — the quadratic-form read (one Lanczos from v, matrix-free).
+
+    `matvec` may be a callable, a scipy LinearOperator, a sparse matrix, or a
+    dense array — anywhere resona takes an operator, all four work.
 
     The certified twin of `apply`: with ``certified=True`` and f given as a
     family name ('log', 'inv', 'sqrt', 'exp'), returns a RIGOROUS bracket
@@ -623,6 +646,7 @@ def quadform(matvec, f, v, k: int = 48, certified: bool = False, support=None):
     """
     func, fam = _resolve_f(f)
     v = np.asarray(v)
+    matvec, _ = _as_operator(matvec, len(v))
     nv2 = float(np.real(np.vdot(v, v)))
     if np.iscomplexobj(v) or _is_complex_operator(matvec, len(v)):
         al, be = _lanczos_herm(matvec, np.asarray(v, complex), k)
@@ -657,10 +681,14 @@ class Spectral:
 
     # ── PROBE (forward transform) ────────────────────────────────────────────
     @classmethod
-    def of(cls, matvec, N, k=48, probes=8, seed=0, engine="lanczos", deflate=0):
+    def of(cls, matvec, N=None, k=48, probes=8, seed=0, engine="lanczos", deflate=0):
         """Harvest the response of the operator given by `matvec` (acts on R^N,
         or on C^N for a complex HERMITIAN operator — detected automatically;
         complex probes are used and the read side is unchanged).
+
+        `matvec` may equally be a scipy LinearOperator, a sparse matrix, or a
+        dense array — then N is read off `.shape` and may be omitted
+        (``resona.of(L)``).  A bare callable still needs N.
 
         Stochastic Lanczos quadrature: `probes` random vectors, `k` Lanczos steps
         each.  Cost O(probes * k) matvecs.  No matrix is formed, no eig is called.
@@ -696,6 +724,7 @@ class Spectral:
         usual accuracy (measured: a float64 torch matvec agrees with the numpy
         path to ~1e-12).  The numpy path itself is untouched, bit-identically.
         """
+        matvec, N = _as_operator(matvec, N)
         rng = np.random.default_rng(seed)
         is_c, xp, ref = _probe_operator(matvec, N)
         if xp is not None and (deflate or engine != "lanczos"):
@@ -1191,7 +1220,10 @@ def apply(matvec, f, v, k: int = 48, hermitian: bool = True):
 
     If v is a torch/cupy/array-API array, the whole Krylov loop runs on its
     device and the result is returned there (float32 caveat: see `Spectral.of`).
+    `matvec` may be a callable, LinearOperator, sparse matrix, or ndarray.
     """
+    if hasattr(matvec, "shape"):        # LinearOperator / sparse / ndarray
+        matvec, _ = _as_operator(matvec)
     xp = _xp(v)
     if xp is not None:                  # device vector → device Krylov
         return _apply_xp(matvec, f, v, k, hermitian, xp)
@@ -1262,6 +1294,52 @@ def apply(matvec, f, v, k: int = 48, hermitian: bool = True):
     return out
 
 
+def grad_trace(matvec, dmatvecs, fprime, N=None, k: int = 48, probes: int = 16,
+               seed: int = 0, with_err: bool = False):
+    """∂/∂θ_j Tr f(A(θ)) — DIFFERENTIABLE spectral reads, matrix-free.
+
+    For a smooth parametric symmetric family A(θ), the exact identity
+        d/dθ_j Tr f(A) = Tr( f'(A) · ∂A/∂θ_j )
+    is estimated by Hutchinson probes shared across ALL parameters: per probe
+    z, ONE Krylov chain u = f'(A)z (`apply`), then every component is the
+    cheap inner product u·(∂A/∂θ_j z).  Cost: probes × (one apply + one
+    matvec per parameter).
+
+    matvec    : A(θ) at the current θ (callable / LinearOperator / sparse /
+                dense — the usual four).
+    dmatvecs  : ∂A/∂θ_j as ONE operator or a LIST of them (same four forms).
+    fprime    : the DERIVATIVE f' as a callable on eigenvalues — you state
+                what you differentiate (e.g. f=log → fprime=lambda x: 1/x:
+                the log-det gradient; f=x² → 2x: a sharpness regularizer).
+    with_err=True → (grad, stderr) per component, the probe scatter.
+
+    This is the socket that makes spectral REGULARIZERS trainable: penalize
+    log-det / sharpness / effective rank during optimization by feeding this
+    gradient to the optimizer (wrap in torch.autograd.Function for autograd;
+    the estimator itself is framework-agnostic).
+
+    HONEST NOTE: stochastic like any trace read — the SAME probes are reused
+    across parameters, so component errors are correlated (a common scale,
+    harmless for descent directions); raise `probes` to tighten.
+    """
+    matvec, N = _as_operator(matvec, N)
+    single = callable(dmatvecs) or hasattr(dmatvecs, "shape")
+    dms = [dmatvecs] if single else list(dmatvecs)
+    dms = [_as_operator(d, N)[0] for d in dms]
+    rng = np.random.default_rng(seed)
+    ests = np.empty((probes, len(dms)))
+    for r in range(probes):
+        z = rng.standard_normal(N)
+        u = apply(matvec, fprime, z, k=k)
+        for j, dm in enumerate(dms):
+            ests[r, j] = float(u @ np.asarray(dm(z)))
+    g = ests.mean(axis=0)
+    if with_err:
+        se = ests.std(axis=0, ddof=1) / np.sqrt(probes)
+        return (float(g[0]), float(se[0])) if single else (g, se)
+    return float(g[0]) if single else g
+
+
 # ── LOCAL response (probe the operator from a CHOSEN vector, not random) ──────
 def local_spectrum(matvec, v, k: int = 48):
     """The local spectral measure seen from vector v:  μ_v = Σ_i |⟨v|ψ_i⟩|² δ(λ_i).
@@ -1271,6 +1349,8 @@ def local_spectrum(matvec, v, k: int = 48):
     (LDOS) at site i.  ``Spectral.of`` averages this over random v (→ the trace);
     here you choose v.  Returns (nodes, weights), weights summing to ‖v‖²-norm 1.
     """
+    if hasattr(matvec, "shape"):        # LinearOperator / sparse / ndarray
+        matvec, _ = _as_operator(matvec)
     if np.iscomplexobj(v) or _is_complex_operator(matvec, len(v)):
         al, be = _lanczos_herm(matvec, np.asarray(v, complex), k)
     else:

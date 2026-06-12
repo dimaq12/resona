@@ -20,15 +20,15 @@ matrix-free — and from which every spectral functional is read.
     resona.solve.rayleigh_polish   # PRECISION — spend effort only on the defect
 """
 from .spectral import (Spectral, apply, quadform, local_spectrum, local_density,
-                       from_measure, from_eigenbasis, synthesize)
+                       from_measure, from_eigenbasis, synthesize, grad_trace)
 from . import wkernel, lift, beta, defect, free, subordination, cost, flow, solve, thermal
 from .cloud import cloud, Cloud
 
 #: convenience: ``resona.of(matvec, N)`` == ``Spectral.of(matvec, N)``
 of = Spectral.of
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 __all__ = ["Spectral", "of", "apply", "quadform", "local_spectrum", "local_density",
-           "from_measure", "from_eigenbasis", "synthesize", "cloud", "Cloud",
-           "wkernel", "lift", "beta", "defect", "free", "subordination", "cost",
-           "flow", "solve", "thermal"]
+           "from_measure", "from_eigenbasis", "synthesize", "grad_trace", "cloud",
+           "Cloud", "wkernel", "lift", "beta", "defect", "free", "subordination",
+           "cost", "flow", "solve", "thermal"]

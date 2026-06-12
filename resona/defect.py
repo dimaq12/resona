@@ -181,6 +181,33 @@ def generator_read(P_n, P_2n, t, n, solver="be"):
     return (4.0 * n / t ** 2) * D
 
 
+def generator_read_converged(P_n, P_2n, P_4n, t, n, solver="be"):
+    """`generator_read` with its own CONVERGENCE CHECK — the Richardson line
+    the plain read tells you to write, written.
+
+    Three resolutions give two independent generator reads:
+        G_n  from (P_n,  P_2n)  at n,
+        G_2n from (P_2n, P_4n)  at 2n,
+    and their disagreement IS the truncation estimate.  Returns
+    (G, rel_dev):
+        G       — the finer read G_2n, Richardson-extrapolated one order
+                  using the defect law's own O(1/n) leading correction:
+                  G = 2·G_2n − G_n;
+        rel_dev — ‖G_2n − G_n‖ / ‖G_2n‖, the convergence certificate: if
+                  this is not small, the law's regime (smooth u₀, resolved
+                  dynamics) does not hold yet and NO budget of algebra fixes
+                  it — refine the solver instead.
+
+    Same verified domain as `generator_read` (backward Euler; CN refused).
+    """
+    G_n = generator_read(P_n, P_2n, t, n, solver=solver)
+    G_2n = generator_read(P_2n, P_4n, t, 2 * n, solver=solver)
+    num = float(np.linalg.norm(np.asarray(G_2n) - np.asarray(G_n)))
+    den = float(np.linalg.norm(np.asarray(G_2n)))
+    rel_dev = num / den if den > 0 else np.inf
+    return 2.0 * np.asarray(G_2n) - np.asarray(G_n), rel_dev
+
+
 def defect_barycentres(power, bands, coords=None):
     """COMPRESS each band of a defect power distribution to ONE coordinate —
     its energy barycentre (the BDS read).  One (location, amplitude) pair per

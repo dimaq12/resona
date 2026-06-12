@@ -20,6 +20,9 @@ import numpy as np, resona
 matvec = lambda v: A @ v          # your operator, however you can apply it
 ```
 
+(1.5+: a scipy `LinearOperator`, a sparse matrix, or a dense array work
+directly everywhere a matvec is taken — `resona.of(L)`, N read off `.shape`.)
+
 ## I want to…
 
 | I want to… | recipe | guide | full example |
@@ -43,9 +46,11 @@ matvec = lambda v: A @ v          # your operator, however you can apply it
 | get a CERTIFIED bracket (the answer provably inside) | `resona.quadform(mv, "inv", v, certified=True, support=(a,None))` | [precision-and-defects](precision-and-defects.md) | [`certified_logdet.py`](../examples/certified_logdet.py) |
 | certify the k-truncation of a trace estimate | `s.trace_certified("log", support=(a,None))` | [precision-and-defects](precision-and-defects.md) | [`certified_logdet.py`](../examples/certified_logdet.py) |
 | error bars on density / cumulants / extremes | `s.density(xs, with_err=True)` etc. — every stochastic read has one | [reading-spectra](reading-spectra.md) | — |
+| DIFFERENTIATE a spectral read (∂/∂θ Tr f(A(θ))) | `resona.grad_trace(mv, dmvs, fprime, N)` | [reading-spectra](reading-spectra.md) | — |
 | resolve INTERIOR eigenvalues (spectrum slicing) | `s.zoom(a, b)` → polish nodes | [reading-spectra](reading-spectra.md) | [`spectra_to_machine_precision.py`](../examples/spectra_to_machine_precision.py) |
 | check how close a disorder computation is to the critical edge | `resona.subordination.contraction(s, xs, σ²)` → compare to 1 | [composing-operators](composing-operators.md) | — |
 | read the Koopman generator out of a legacy solver's error | `resona.defect.generator_read(P_n, P_2n, t, n)` | [precision-and-defects](precision-and-defects.md) | [`defect_spectroscopy.py`](../examples/defect_spectroscopy.py) |
+| …with its own convergence certificate (3 resolutions) | `resona.defect.generator_read_converged(P_n, P_2n, P_4n, t, n)` | [precision-and-defects](precision-and-defects.md) | — |
 | read per-band barycentres from the same error (blind-zone-free) | `resona.defect.defect_barycentres(power, bands, coords)` | [precision-and-defects](precision-and-defects.md) | [`defect_spectroscopy.py`](../examples/defect_spectroscopy.py) |
 | follow eigenvalues through CROSSINGS along a parameter path | `resona.wkernel.track(A0, Bs, path)` | [inverse-problems](inverse-problems.md) | — |
 | size a safe parameter step (trust region for frozen W) | `resona.wkernel.kappa_w(A0, Bs, k0)` | [inverse-problems](inverse-problems.md) | — |

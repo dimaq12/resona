@@ -3,7 +3,7 @@
 Your Hessian is d×d with d in the millions, but you can compute Hessian-vector
 products (autograd gives them for free).  That is exactly resona's input.
 
-Your first five tasks:
+Your first tasks:
 
 | task | call |
 |---|---|
@@ -12,6 +12,7 @@ Your first five tasks:
 | Hessian eigenvalue DENSITY (the loss landscape's shape) | `s.density(xs)` — negative mass = saddles, outliers = sharp directions |
 | GP / Laplace marginal-likelihood log-det | `resona.of(Kmv, N, deflate=64).trace("log")` |
 | effective dimensionality of a representation | `resona.of(cov_mv, d).effective_rank(with_err=True)` |
+| TRAIN against a spectral regularizer (∂/∂θ Tr f(H(θ))) | `resona.grad_trace(hvp, dhvps, fprime, d)` — same probes across all parameters; wrap in `torch.autograd.Function` |
 
 Notes that save you a day: `deflate=K` is Hutch++ — on spiked spectra
 (kernels, covariances, NTKs are all spiked) it collapses the estimator

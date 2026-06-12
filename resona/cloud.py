@@ -81,10 +81,15 @@ class Cloud:
                 f"radius≥{self.radius():.3g}, abscissa≥{self.abscissa():.3g})")
 
 
-def cloud(matvec, N, k=48, probes=4, seed=0):
+def cloud(matvec, N=None, k=48, probes=4, seed=0):
     """Probe a NON-HERMITIAN operator: Arnoldi from `probes` random vectors,
     pooled complex Ritz values.  See the module docstring for what these
-    values are — and are not."""
+    values are — and are not.
+
+    `matvec` may be a callable (then N is required), or a scipy
+    LinearOperator / sparse matrix / dense array (then N is read off .shape)."""
+    from .spectral import _as_operator
+    matvec, N = _as_operator(matvec, N)
     rng = np.random.default_rng(seed)
     nodes, sizes = [], []
     for _ in range(probes):

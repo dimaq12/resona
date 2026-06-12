@@ -3,6 +3,26 @@
 All notable changes to resona.  The discipline throughout: every number below
 is printed by a test or a gallery stand, not asserted by hand.
 
+## [1.5.0] — 2026-06-12
+EPIC3 Phase 3 "the doors" — three interop/capability sockets, no new math
+surface beyond them, boundary contract intact.
+- **`resona.grad_trace`** — DIFFERENTIABLE spectral reads: ∂/∂θ_j Tr f(A(θ))
+  = Tr(f′(A)·∂A/∂θ_j), Hutchinson probes SHARED across all parameters (one
+  Krylov chain per probe + one matvec per parameter).  `with_err=True` gives
+  the per-component probe scatter.  Verified against dense ground truth
+  (log-det gradient Tr(A⁻¹B); multi-parameter sharpness 2·Tr(AB_j)).  This
+  is the socket that makes spectral regularizers trainable.
+- **The interop shim**: everywhere a matvec is taken — `of`, `apply`,
+  `quadform`, `local_spectrum`/`local_density`, `cloud`, `grad_trace` — a
+  scipy `LinearOperator`, sparse matrix, or dense array now works directly,
+  with N read off `.shape` (`resona.of(L)`).  Bare callables are untouched
+  bit-identically; shape/N contradictions raise.
+- **`defect.generator_read_converged`** — the Richardson line, written:
+  three resolutions → two independent generator reads → (extrapolated G,
+  rel_dev convergence certificate); measured in tests: the extrapolated
+  read beats the plain one with rel_dev < 0.2 as the gate.
+- 117 tests; full-gallery ratchet: zero metric diffs (additive only).
+
 ## [1.4.0] — 2026-06-12
 EPIC3 "the deprecation release" — honesty completion, zero breaks (every old
 name still works; removals happen in 2.0 only).  See MIGRATION.md.
