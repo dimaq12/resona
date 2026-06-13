@@ -112,8 +112,11 @@ def rayleigh_polish(A, sigma, N=None, iters=6, v0=None, seed=0, tol=0.0):
         else:
             from scipy.sparse.linalg import LinearOperator, minres
             op = LinearOperator((N, N), matvec=lambda x: mv(x) - lam * x)
-            v_new, _ = minres(op, v, rtol=1e-12, maxiter=4 * N)
-            if not np.any(v_new):
+            v_new, info = minres(op, v, rtol=1e-12, maxiter=4 * N)
+            # inverse iteration tolerates a rough solve (only the DIRECTION matters),
+            # so info>0 (maxiter) is fine — but a breakdown (info<0) or a null /
+            # non-finite vector is garbage: stop and keep the last good lam.
+            if info < 0 or not np.any(v_new) or not np.all(np.isfinite(v_new)):
                 break
             v = v_new
         v = v / np.linalg.norm(v)

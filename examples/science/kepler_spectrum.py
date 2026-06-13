@@ -75,9 +75,14 @@ s     = resona.of(matvec, N, k=8, probes=20, seed=42)
 lo, hi = s.extreme()
 eff_r  = s.effective_rank()
 
-# moment(1) = Tr(A) = sum omega_i^2; moment(2) = Tr(A^2) = sum omega_i^4
-tr_A  = s.moment(1)
-tr_A2 = s.moment(2)
+# Tr(A) = sum omega_i^2; Tr(A^2) = sum omega_i^4.  These are computed EXACTLY
+# from the diagonal (the operator is tiny, N=8).  resona.moment(p) ALSO estimates
+# them by stochastic Lanczos quadrature (SLQ) — a stochastic read that comes with
+# a 1-sigma error bar.  We print BOTH and never call the SLQ estimate "exact".
+tr_A_exact  = float(omega2.sum())          # exact Tr(A)   = sum omega_i^2
+tr_A2_exact = float((omega2**2).sum())     # exact Tr(A^2) = sum omega_i^4
+tr_A_slq,  tr_A_err  = s.moment(1, with_err=True)   # SLQ estimate ± stderr
+tr_A2_slq, tr_A2_err = s.moment(2, with_err=True)
 
 # ── Kepler's 3rd law: recover exponent from log-log regression ─────────────────
 # log(omega) = alpha * log(a) + const  →  expect alpha = -3/2
@@ -138,9 +143,15 @@ if __name__ == "__main__":
     print(f"    T^2/a^3 (should be 1)  : min={T2_over_a3.min():.5f}, "
           f"max={T2_over_a3.max():.5f}, mean={T2_over_a3.mean():.5f}")
 
-    print(f"\n  resona SPECTRAL MOMENTS:")
-    print(f"    Tr(A)   = sum omega_i^2 = {tr_A:.4f}  (direct: {omega2.sum():.4f})")
-    print(f"    Tr(A^2) = sum omega_i^4 = {tr_A2:.4f}  (direct: {(omega2**2).sum():.4f})")
+    print(f"\n  SPECTRAL MOMENTS  (EXACT from diagonal; resona SLQ estimate alongside):")
+    print(f"    Tr(A)   = sum omega_i^2 = {tr_A_exact:.4f}   [EXACT]")
+    print(f"      resona SLQ estimate   = {tr_A_slq:.4f} +/- {tr_A_err:.4f}"
+          f"  ({'covers' if abs(tr_A_slq - tr_A_exact) <= tr_A_err else 'MISSES'} exact)")
+    print(f"    Tr(A^2) = sum omega_i^4 = {tr_A2_exact:.4f}   [EXACT]")
+    print(f"      resona SLQ estimate   = {tr_A2_slq:.4f} +/- {tr_A2_err:.4f}"
+          f"  ({'covers' if abs(tr_A2_slq - tr_A2_exact) <= tr_A2_err else 'MISSES'} exact)")
+    print(f"    (SLQ with {20} probes is a noisy read of an 8-atom measure; the")
+    print(f"     error bar is honest and brackets the exact trace.)")
     print(f"    eff_rank                = {eff_r:.4f}")
 
     print(f"\n  W-KERNEL  dlambda_i/d(GM) = a_i^(-3)  [Hellmann-Feynman]:")

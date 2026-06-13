@@ -15,10 +15,17 @@ WHY:   In the FA spectral program a "defect" D_n = P_n − P_{2n} is the
        sorted permutation.  The un-frozen prefix still carries momentum; its
        values ARE their own sorted rank, so one placement collapses them.
 
-RESONA's role:  We use resona.of to compute the effective_rank of the
-       comparison-count matrix C (C[i,j] = how often element i displaced
-       element j across passes).  effective_rank(C) quantifies how many
-       "modes" the sort process actually uses — a spectral fingerprint of the
+RESONA's role:  We use resona.of to compute the effective_rank (participation
+       ratio of the singular spectrum) of the comparison-count matrix C
+       (C[i,j] = how often element i displaced element j across passes).  C is
+       NON-NORMAL and strictly off-diagonal (Tr C = 0), so the PSD trace-moment
+       proxy Tr(A)²/Tr(A²) cannot be applied to C itself — it would divide a
+       meaningless zero trace and report noise.  We instead apply it to the
+       genuinely PSD Gram operator CᵀC, whose effective_rank = (Σσ²)²/Σσ⁴ is a
+       valid count of how many SINGULAR modes carry the sort's response.  C has
+       near-full numerical rank (≈N nonzero singular values), yet its
+       participation ratio is tiny (~2): the response is concentrated in a
+       couple of dominant modes, not low-rank — a spectral fingerprint of the
        permutation's defect structure.
 
 Run:   python3 examples/spectral_phenomena/defect_sort.py
@@ -148,24 +155,35 @@ if __name__ == "__main__":
 
     print(f"\n  Total mismatches across all sizes: {total_mismatches}")
 
-    # Spectral fingerprint via resona
-    print(f"\n  Spectral effective_rank of the comparison operator C:")
-    print(f"  {'N':>5s}  {'effective_rank(C)':>18s}  {'n_passes':>8s}")
-    print(f"  {'-'*5}  {'-'*18}  {'-'*8}")
+    # Spectral fingerprint via resona.
+    #
+    # HONESTY NOTE: C is strictly off-diagonal in value order, so Tr C = 0 and C
+    # is NON-NORMAL (and near-full numerical rank).  The effective_rank proxy
+    # Tr(A)²/Tr(A²) is only meaningful for a POSITIVE-SEMIDEFINITE operator;
+    # applied to C (or to C+Cᵀ, also trace-0) it divides a vanishing trace and
+    # reports noise.  We therefore apply resona to the genuinely PSD Gram
+    # operator CᵀC — its effective_rank = (Σσ²)²/Σσ⁴ is a valid participation
+    # ratio of C's SINGULAR spectrum (how many singular modes carry the sort's
+    # response).  The SLQ read is stochastic, so we print it with its error bar
+    # and check it against the dense singular values.
+    print(f"\n  Singular-mode participation ratio of the comparison operator C")
+    print(f"  (resona effective_rank of the PSD Gram operator CᵀC):\n")
+    print(f"  {'N':>5s}  {'eff_rank(CᵀC)':>16s}  {'numerical rank(C)':>17s}")
+    print(f"  {'-'*5}  {'-'*16}  {'-'*17}")
 
     for N in [20, 50, 100]:
         arr = rng.permutation(N).astype(float)
         C = comparison_operator(arr, n_passes=N)
-        # C is N×N, non-symmetric — use it as a symmetric proxy via C+C^T
-        Csym = C + C.T
-        matvec = lambda v, M=Csym: M @ v
-        s = resona.of(matvec, N, k=min(48, N - 1), probes=8)
-        er = s.effective_rank()
-        total_passes = N  # bubble passes used
-        print(f"  {N:>5d}  {er:>18.2f}  {total_passes:>8d}")
+        matvec = lambda v, M=C: M.T @ (M @ v)          # PSD: eigenvalues = σ(C)²
+        s = resona.of(matvec, N, k=min(60, N - 1), probes=16, seed=0)
+        er, err = s.effective_rank(with_err=True)
+        nrank = int(np.linalg.matrix_rank(C))          # honest dense rank
+        print(f"  {N:>5d}  {er:>9.2f} ± {err:<4.2f}  {nrank:>17d}")
 
-    print(f"\n  effective_rank  < N  → sort uses far fewer spectral modes than naively expected")
-    print(f"  This is the defect's spectral signature: concentrated response, not diffuse.")
+    print(f"\n  participation ratio ≈ 2  ≪  numerical rank ≈ N  → the sort's response")
+    print(f"  is CONCENTRATED in ~2 dominant singular modes, NOT low-rank.")
+    print(f"  This is the defect's spectral signature: concentrated, not diffuse,")
+    print(f"  even though C is non-normal (Tr C = 0) and nearly full rank.")
 
     # ── the pseudospectrum: where the sort's NON-NORMAL defect actually lives ──
     # The raw comparison operator C is strictly triangular in value order =
@@ -194,5 +212,6 @@ if __name__ == "__main__":
     print("  RESULT: zero mismatches.  The defect velocity field partitions")
     print("  frozen-tail (correctly placed) from flowing-head (placed by value rank).")
     print("  One np.sort on the head values → exact match with np.sort on full array.")
-    print("  resona.effective_rank(C) < N confirms the sort uses a low-rank response.")
+    print("  resona.effective_rank(CᵀC) ≈ 2 ≪ rank(C) ≈ N confirms the sort's")
+    print("  response is concentrated in a few singular modes (not low-rank).")
     print("=" * 70)

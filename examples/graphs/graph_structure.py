@@ -30,7 +30,7 @@ import sys, os, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 import numpy as np
 from scipy import sparse
-from scipy.sparse.linalg import eigsh
+from scipy.sparse.linalg import eigsh, ArpackNoConvergence
 import resona
 
 rng = np.random.default_rng(42)
@@ -120,7 +120,13 @@ class GraphOperator:
                         if low[u] > tin[par]:
                             e = (min(par, u), max(par, u))
                             self.bridges.add(e)
-                        if low[u] >= tin[par]:
+                        # Non-root articulation test.  This `low[u] >= tin[par]`
+                        # rule is ONLY valid when `par` is NOT the DFS-tree root:
+                        # the root is an articulation point iff it has >1 tree
+                        # children (handled below), and applying the child-based
+                        # test to it gives a false positive for every root with a
+                        # single child.  Exclude par == start here.
+                        if par != start and low[u] >= tin[par]:
                             self.is_articulation[par] = True
 
             # Root: articulation iff it has >1 DFS tree children
@@ -135,29 +141,48 @@ class GraphOperator:
         return self.is_articulation[v]
 
     # --- Batagelj-Zaversnik k-core decomposition -------------------------
+    # Vertices are kept in a single array `vert` sorted by current degree, with
+    # `bin[d]` marking where degree-d vertices begin.  We scan `vert` left to
+    # right (lowest current degree first); peeling a vertex decrements each live
+    # neighbour's degree by swapping it one slot left across its bin boundary.
+    # coreness[v] = the degree v has at the moment it is peeled.  (The earlier
+    # per-bucket `list(buckets[d])` snapshot dropped every vertex that was moved
+    # into bucket d *after* the snapshot, badly over-counting coreness.)
     def _kcore(self):
-        deg = [len(self.adj[v]) for v in range(self.n)]
-        max_d = max(deg) if self.n else 0
-        buckets = [[] for _ in range(max_d + 1)]
-        for v in range(self.n):
-            buckets[deg[v]].append(v)
-        pos = {v: i for d in range(max_d + 1) for i, v in enumerate(buckets[d])}
-        self.coreness = [0] * self.n
-        removed = [False] * self.n
+        n = self.n
+        deg = [len(self.adj[v]) for v in range(n)]
+        if n == 0:
+            self.coreness = []
+            return
+        max_d = max(deg)
+        # counting sort of vertices by degree
+        bin_ = [0] * (max_d + 1)
+        for v in range(n):
+            bin_[deg[v]] += 1
+        start = 0
         for d in range(max_d + 1):
-            for v in list(buckets[d]):
-                if removed[v]:
-                    continue
-                self.coreness[v] = d; removed[v] = True
-                for w in self.adj[v]:
-                    if removed[w]:
-                        continue
+            bin_[d], start = start, start + bin_[d]
+        vert = [0] * n          # vertices sorted by degree
+        pos = [0] * n           # pos[v] = index of v in vert
+        tmp = bin_[:]
+        for v in range(n):
+            pos[v] = tmp[deg[v]]
+            vert[pos[v]] = v
+            tmp[deg[v]] += 1
+        self.coreness = deg[:]  # will be overwritten as vertices are peeled
+        for i in range(n):
+            v = vert[i]
+            self.coreness[v] = deg[v]
+            for w in self.adj[v]:
+                if deg[w] > deg[v]:
+                    # move w one slot toward lower degree
                     dw = deg[w]; pw = pos[w]
-                    last = buckets[dw][-1]
-                    buckets[dw][pw] = last; pos[last] = pw
-                    buckets[dw].pop()
+                    pf = bin_[dw]; fw = vert[pf]   # first vertex in w's bin
+                    if w != fw:
+                        vert[pw], vert[pf] = fw, w
+                        pos[fw], pos[w] = pw, pf
+                    bin_[dw] += 1
                     deg[w] -= 1
-                    buckets[deg[w]].append(w); pos[w] = len(buckets[deg[w]]) - 1
 
     def get_coreness(self, v: int) -> int:
         return self.coreness[v]
@@ -172,11 +197,19 @@ print("=" * 72)
 print(f"GRAPH STRUCTURE — precompute once, O(1) queries  (V={V}, E≈{E_target})")
 print("=" * 72)
 
-# Random Erdos-Renyi-ish graph
+# Random Erdos-Renyi-ish graph.  Dedup to a SIMPLE graph: a random integer
+# draw can produce parallel edges (u,v) more than once, and keeping those
+# duplicates inflates every vertex degree — which in turn inflates k-core
+# coreness and corrupts the Tarjan parent-edge test.  All structural
+# measures below (coreness, articulation, bridges, Laplacian) are defined
+# for a simple undirected graph, so we deduplicate once, here.
 src = rng.integers(0, V, E_target)
 dst = rng.integers(0, V, E_target)
 mask = src != dst
-edges = list(zip(src[mask].tolist(), dst[mask].tolist()))
+_uedges = set()
+for u, v in zip(src[mask].tolist(), dst[mask].tolist()):
+    _uedges.add((u, v) if u < v else (v, u))
+edges = sorted(_uedges)
 E = len(edges)
 
 print(f"\n  Graph: {V} vertices, {E} edges (random)")
@@ -263,11 +296,19 @@ print(f"     effective_rank/{V} ≈ complexity of the spectral structure)")
 
 print(f"\n  resona machine-precision polish (rayleigh_polish, matrix-free):")
 
-# λ_max: seed from s.extreme(), verify against eigsh which='LM'
+# λ_max: seed from s.extreme(), verify against eigsh which='LM'.
+# eigsh signals non-convergence by raising ArpackNoConvergence — capture it
+# instead of silently treating an unconverged value as ground truth.
 lam_max_polish = resona.solve.rayleigh_polish(matvec, sigma=lam_max, N=V)
-lam_max_ref = float(eigsh(L, k=1, which="LM", return_eigenvectors=False)[0])
+try:
+    lam_max_ref = float(eigsh(L, k=1, which="LM", return_eigenvectors=False)[0])
+    lam_max_conv = True
+except ArpackNoConvergence as e:
+    lam_max_conv = False
+    lam_max_ref = float(e.eigenvalues[0]) if len(e.eigenvalues) else float("nan")
+conv_tag = "" if lam_max_conv else "  [eigsh NOT converged]"
 print(f"    λ_max  polished     : {lam_max_polish:.12f}")
-print(f"    λ_max  eigsh (LM)   : {lam_max_ref:.12f}   |Δ| = {abs(lam_max_polish-lam_max_ref):.2e}")
+print(f"    λ_max  eigsh (LM)   : {lam_max_ref:.12f}   |Δ| = {abs(lam_max_polish-lam_max_ref):.2e}{conv_tag}")
 
 # λ₂: polish the eigsh estimate (tol=1e-6) to machine precision
 try:

@@ -38,7 +38,13 @@ ADDITIONAL METRIC — spectral kurtosis from resona.moment():
 
 ENCODING.  Jordan-Wigner: γ_{2j} → X_j Z_{j-1}..Z_0,
                            γ_{2j+1} → Y_j Z_{j-1}..Z_0.
-N Majoranas → M = N//2 qubits → D = 2^M states.
+N Majoranas → M = N//2 qubits → D = 2^M states.  Each γ_a is Hermitian.
+A product of distinct Majoranas is a PHASED permutation (the Y factors and
+the i in their Clifford reordering carry genuine complex phases), so H is
+built as a COMPLEX matrix.  HERMITICITY: γᵢγⱼ (i≠j) is ANTI-Hermitian, so
+SYK2 carries an explicit i prefactor  H₂ = i Σ J_{ij} γᵢγⱼ ; a product of
+four distinct Majoranas is Hermitian, so SYK4 needs none.  Both builds
+satisfy max|H − Hᴴ| = 0 exactly (asserted at runtime).
 
 HONESTY CAVEAT.  The kurtosis direction (κ(SYK4)→3 at large N) is a
 large-N theoretical prediction.  At finite N=16-20, the ordering is reversed
@@ -54,46 +60,73 @@ from itertools import combinations
 import resona
 
 
-def pauli_action(a):
-    """JW-encoded Majorana γ_a: qubit j=a//2, Pauli X/Y, Z-string on 0..j-1."""
-    j = a // 2
-    return j, (a % 2 == 1), list(range(j))
+_X = np.array([[0, 1], [1, 0]], dtype=np.complex128)
+_Y = np.array([[0, -1j], [1j, 0]], dtype=np.complex128)
+_Z = np.array([[1, 0], [0, -1]], dtype=np.complex128)
+_I = np.eye(2, dtype=np.complex128)
+
+
+def reduce_majorana_product(idxs, M):
+    """Reduce a product γ_{a0}·γ_{a1}·… of JW-encoded Majoranas to a single
+    phased-permutation Pauli string.  Returns (flip, per_qubit) where flip is
+    the bit-mask of flipped qubits and per_qubit[j] = (v0, v1) are the COMPLEX
+    amplitudes the j-th qubit contributes when its bit is 0 / 1.  This keeps
+    every i from the Y operators and every −1 from the Z-string, so the encoded
+    operator is the genuine (Hermitian) Majorana product, not a real surrogate.
+    Qubit j ↔ bit j (LSB); γ_{2j}=X_j Z..Z₀, γ_{2j+1}=Y_j Z..Z₀.
+    """
+    ops = [_I.copy() for _ in range(M)]
+    for a in idxs:
+        j = a // 2
+        ops[j] = (_X if a % 2 == 0 else _Y) @ ops[j]
+        for k in range(j):                # Jordan-Wigner Z-string below j
+            ops[k] = _Z @ ops[k]
+    flip = 0
+    per_qubit = []
+    for j, op in enumerate(ops):          # each op is a Pauli×scalar ⇒ 1 nz/col
+        r0 = int(np.argmax(np.abs(op[:, 0])))
+        r1 = int(np.argmax(np.abs(op[:, 1])))
+        per_qubit.append((op[r0, 0], op[r1, 1]))
+        if r0 == 1:                       # column 0 lands on row 1 ⇒ qubit flips
+            flip |= (1 << j)
+    return flip, per_qubit
 
 
 def build_syk(N, lam, seed):
-    """Dense SYK Hamiltonian.  N Majoranas → D=2^(N/2) states.
+    """Dense COMPLEX SYK Hamiltonian.  N Majoranas → D=2^(N/2) states.
     lam=0: pure SYK2; lam=1: pure SYK4.
+
+    SYK2 = i·Σ_{i<j} J_{ij} γᵢγⱼ  (the i makes the anti-Hermitian γᵢγⱼ Hermitian);
+    SYK4 = Σ_{i<j<k<l} J_{ijkl} γᵢγⱼγₖγₗ  (a 4-Majorana product is already
+    Hermitian).  The result satisfies H = Hᴴ exactly.
     """
     M = N // 2
     D = 1 << M
     rng = np.random.default_rng(seed)
-    H = np.zeros((D, D), dtype=np.float64)
+    H = np.zeros((D, D), dtype=np.complex128)
     states = np.arange(D, dtype=np.int64)
 
     def add_term(idxs, coeff):
-        acts = [pauli_action(a) for a in idxs]
-        flip = 0
-        for j, is_Y, zs in acts:
-            flip ^= (1 << j)              # XOR, not sum
-        phase = np.ones(D, dtype=np.float64)
-        for j, is_Y, zs in acts:
-            if is_Y:
-                phase *= (1 - 2 * ((states >> j) & 1).astype(float))
-            for k in zs:
-                phase *= (1 - 2 * ((states >> k) & 1).astype(float))
+        flip, per_qubit = reduce_majorana_product(idxs, M)
+        phase = np.full(D, coeff, dtype=np.complex128)
+        for j, (v0, v1) in enumerate(per_qubit):
+            bit = (states >> j) & 1
+            phase *= np.where(bit == 0, v0, v1)
         targets = (states ^ flip).astype(int)
-        H[targets, states] += coeff * phase
+        np.add.at(H, (targets, states), phase)
 
-    if lam > 0:                           # SYK4 quartic terms
+    if lam > 0:                           # SYK4 quartic terms (Hermitian as-is)
         sigma = np.sqrt(6.0 / N**3)
         for a, b, c, d in combinations(range(N), 4):
             add_term((a, b, c, d), lam * rng.normal(0, sigma))
 
-    if lam < 1:                           # SYK2 quadratic terms
+    if lam < 1:                           # SYK2 quadratic terms (need i prefactor)
         sigma = 1.0 / np.sqrt(N)
         for a, b in combinations(range(N), 2):
-            add_term((a, b), (1 - lam) * rng.normal(0, sigma))
+            add_term((a, b), 1j * (1 - lam) * rng.normal(0, sigma))
 
+    herm = np.max(np.abs(H - H.conj().T))
+    assert herm < 1e-9, f"H not Hermitian: max|H-Hᴴ|={herm:.2e}"
     return H
 
 
@@ -102,11 +135,11 @@ def compute_cv(matvec, D, k_order, n_probes):
     estimates = []
     for seed in range(n_probes):
         rng = np.random.default_rng(seed + 1000)
-        x = rng.choice([-1.0, 1.0], size=D)
+        x = rng.choice([-1.0, 1.0], size=D).astype(np.complex128)
         xk = x.copy()
         for _ in range(k_order):
             xk = matvec(xk)
-        estimates.append(np.dot(xk, xk) / D)
+        estimates.append(np.vdot(xk, xk).real / D)   # ‖Hᵏx‖² for complex H
     arr = np.array(estimates)
     return 100 * np.std(arr) / (np.mean(arr) + 1e-30), np.mean(arr)
 

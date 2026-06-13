@@ -3,6 +3,33 @@
 All notable changes to resona.  The discipline throughout: every number below
 is printed by a test or a gallery stand, not asserted by hand.
 
+## [2.0.1] — 2026-06-13
+Bugfix — `examples/quantum/phase_transition.py` had TWO stacked bugs that the
+gallery ratchet could not see (it diffs output *stability*, not *correctness*).
+Both confirmed against dense exact and the free-fermion analytic TFIM ground
+energy; found by an independent multi-agent correctness audit + dense arbitration.
+- **Root bug — the Hamiltonian was built wrong.**  `build_tfim_parts` used
+  `rows = np.repeat(states, n)`, which is **misaligned** with the bit-major
+  `cols = concatenate([states ^ (1<<i) ...])`, so the −ΣXᵢ flip operator (and
+  hence H) was **non-symmetric and incorrect** (`allclose(H,Hᵀ)=False`).  resona's
+  Hermitian Lanczos then returned a wrong E₀ (−14.31 vs true −15.32).  **Fix**:
+  `rows = np.tile(states, n)`.  H is now symmetric and its ground energy matches
+  the free-fermion exact value to 1e-14 (n=12,h=1: −15.3226), and resona's
+  matrix-free E₀ matches dense `eigvalsh` to 1e-14.
+- **Solver bug — the resolvent never converged.**  Φ_η solved `((H−E₀)²+η²)⁻¹`
+  with plain CG on the SQUARED operator (condition κ²): `info=5000` every call,
+  returning garbage (‖Rz−exact‖/‖·‖ ≈ 16–40).  **Fix**: factor
+  `R = ((H−E₀)−iη)⁻¹·((H−E₀)+iη)⁻¹` — two complex-shifted `bicgstab` solves
+  (condition κ), `info=0`, ‖Rz−exact‖/‖·‖ ≈ 1e-5.  **48× faster** (191s → 4.0s).
+- With both fixes the susceptibility now matches the dense-exact `Tr[B R B R]`
+  curve (up to Hutchinson noise) — it rises through the transition and plateaus,
+  and `LOCATED ✓` is now a real detection, not a heuristic landing on garbage.
+  Baseline snapshot re-ratified; 117 tests green.
+- **Ratchet note**: this exposed that the gallery ratchet guards output
+  *stability* but not *physical correctness*, and that ~15 stochastic stands ship
+  without a fixed RNG seed (so they can't be reproducibly verified).  Follow-ups:
+  dense/analytic certificate anchors for the numeric stands, and seeded RNG.
+
 ## [2.0.0] — 2026-06-13
 EPIC3 Phase 5 — THE BREAK (owner-approved).  The deprecation cycle closes:
 old names removed, one consolidation, zero math changes.

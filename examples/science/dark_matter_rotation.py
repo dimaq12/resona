@@ -14,8 +14,10 @@ The gap is the "missing mass problem".  Three standard models compete:
 resona's ROLE.  The W-kernel pseudo-inverse is a regularised linear inverse problem:
   W · ρ_DM = Δv²    (W_ij = 4π r_j² Δr / r_i, the "mass-to-rotation" kernel)
 We pass the MOND-fit residual as a linear operator matvec and let resona.of(...)
-inspect its spectral response — s.condition() (the hub's λmax/λmin read) tells us
-how ill-posed the inversion is.  The inversion itself is also run as a resona
+inspect its spectral response.  The kernel is RANK-DEFICIENT (a zero column makes
+W singular, true cond = +inf), so we report the rank and the PSEUDO-condition over
+the nonzero spectrum (λmax/λmin⁺) — never a fake finite cond on a singular operator.
+The inversion itself is also run as a resona
 matrix function: resona.apply with f(λ)=1/λ on the regularised normal operator
 reproduces the dense Tikhonov solve, matrix-free.  The a₀ recovery uses a
 gradient descent on the MOND interpolation equation, a 1-D fixed-point problem.
@@ -124,14 +126,37 @@ v_total = np.sqrt(np.maximum(V_DISK**2 + v_dm2, 0.0))
 chi2_dm = float(np.sum((v_total - V_OBS)**2))
 
 # ── 5.  resona: probe the W^T W normal operator's spectral condition ─────────
-# W^T·W is symmetric PSD; its extreme eigenvalues give the condition number
+# W^T·W is symmetric PSD; its NONZERO eigenvalues give the condition number
 # of the DM recovery — how ill-posed the inversion is.
-def WtW_matvec(x):
-    return W_dm.T @ (W_dm @ x)
+#
+# RANK-DEFICIENCY.  The discretised kernel W is SINGULAR: dr = diff(r, prepend=r[0])
+# sets dr[0] = 0, so column 0 of W is identically zero and W has a 1-D null space.
+# Therefore W^T·W has an EXACT zero eigenvalue and its true condition number is +∞.
+# A naive Lanczos read of λ_min on the full operator returns a spurious nonzero
+# "ghost" (a Ritz value inside the spectral gap, not a true eigenvalue) and hence
+# a finite-but-fake condition number.  The honest quantity is the PSEUDO-condition
+# over the nonzero spectrum, κ⁺ = λ_max / λ_min⁺, reported alongside the rank.
+#
+# We detect the null space directly (zero-norm columns of W), restrict the probe
+# to the genuine column space, and let resona read the true nonzero extremes there.
+col_norm = np.linalg.norm(W_dm, axis=0)
+keep = col_norm > 1e-10 * col_norm.max()           # non-null coordinate directions
+rank = int(keep.sum())
+null_dim = N - rank
+Wr = W_dm[:, keep]                                  # null space removed
+Nr = Wr.shape[1]
 
-s = resona.of(WtW_matvec, N, k=24, probes=6)
-lam_lo, lam_hi = s.extreme()
-spectral_condition = np.sqrt(s.condition())         # κ(W) = √κ(WᵀW), hub read
+def WtW_matvec(x):
+    return W_dm.T @ (W_dm @ x)                       # full normal operator (singular)
+
+def WtWr_matvec(x):
+    return Wr.T @ (Wr @ x)                           # restricted to column space (SPD)
+
+# Probe the restricted (full-rank) operator: its extremes ARE the nonzero spectrum.
+s = resona.of(WtWr_matvec, Nr, k=Nr, probes=8, seed=0)
+lam_lo, lam_hi = s.extreme()                         # λ_min⁺, λ_max of W^T·W
+pseudo_cond_WtW = lam_hi / lam_lo                    # κ⁺(W^T·W) over nonzero spectrum
+spectral_condition = np.sqrt(pseudo_cond_WtW)        # κ⁺(W) = √κ⁺(W^T·W)
 eff_rank = s.effective_rank()
 
 # resona.apply: the SAME Tikhonov inversion, matrix-free.  f(λ)=1/λ applied to
@@ -159,18 +184,22 @@ print(f"  Milgrom canonical  = {MILGROM_A0:.3e} m/s²")
 print(f"  Ratio (recovered/Milgrom) = {a0_SI/MILGROM_A0:.2f}  (1.00 = perfect)\n")
 
 print(f"  W^T·W spectral probe (resona.of, matrix-free):")
-print(f"    λ_min(W^T·W) = {lam_lo:.3f},  λ_max(W^T·W) = {lam_hi:.3f}")
-print(f"    cond(W) = sqrt(s.condition()) = {spectral_condition:.1f}")
-print(f"    effective_rank   = {eff_rank:.1f} / {N}  (low → few modes dominate inversion)")
+print(f"    RANK-DEFICIENT: rank(W) = {rank} / {N}  (null dim = {null_dim}); "
+      f"true cond(W) = +inf")
+print(f"    λ_min⁺(W^T·W) = {lam_lo:.3f} (smallest NONZERO),  "
+      f"λ_max(W^T·W) = {lam_hi:.3f}")
+print(f"    pseudo-cond⁺(W) = sqrt(λ_max/λ_min⁺) = {spectral_condition:.1f}  "
+      f"(over nonzero spectrum)")
+print(f"    effective_rank   = {eff_rank:.1f} / {Nr}  (low → few modes dominate inversion)")
 print(f"    matrix-free Tikhonov solve (resona.apply, f=1/λ): rel. deviation from")
 print(f"    the dense solve = {solve_rel_err:.1e}  (same ρ_DM, no factorisation)\n")
 
 print("=" * 72)
 print("  HONESTY NOTE: This is a curve-fit demonstration, not a cosmology proof.")
 print("  Both MOND and DM halo reproduce NGC 3198 with one free parameter each.")
-print("  The W-kernel / resona spectral probe shows how ill-conditioned the mass")
-print("  recovery is — a high condition number means the density profile is not")
-print("  uniquely pinned by rotation-curve data alone.  The 'recovered a₀' is a")
+print("  The W-kernel is RANK-DEFICIENT (true cond = +inf); the resona probe reads")
+print("  the nonzero spectrum honestly — the density profile is NOT uniquely pinned")
+print("  by rotation-curve data alone.  The 'recovered a₀' is a")
 print("  least-squares number from a single galaxy; Milgrom's value is the median")
 print("  over ~100 galaxies.  Agreement here is expected for NGC 3198 specifically.")
 print("=" * 72)

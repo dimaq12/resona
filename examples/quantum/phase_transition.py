@@ -23,11 +23,13 @@ of the spectrum.
 
 WHY IT'S MATRIX-FREE.  Everything is matvecs:
   • E₀ from resona (extreme eigenvalue, stochastic Lanczos) — no eig.
-  • R·z = ((H−E₀)²+η²)⁻¹ z by CONJUGATE GRADIENT — only H·v products.
+  • R·z = ((H−E₀)²+η²)⁻¹ z by two COMPLEX-SHIFTED solves — only H·v products.
   • Tr[B R B R] by HUTCHINSON — random probes x, average xᵀ B R B R x.
-η keeps (H−E₀)²+η² well-conditioned so CG converges fast; it is the resolution at
-which we look for the defect.  Total cost O(probes · n_cg · D), i.e. linear in D —
-no O(D³), no matrix ever formed.
+η is the resolution at which we look for the defect.  The squared form (H−E₀)²+η²
+has condition number κ²; factoring R = ((H−E₀)−iη)⁻¹((H−E₀)+iη)⁻¹ into two shifted
+solves (condition κ) is what actually CONVERGES — plain CG on the squared operator
+stalls at maxiter and returns garbage.  Total cost O(probes · n_iter · D), i.e.
+linear in D — no O(D³), no matrix ever formed.
 
 MODEL.  TFIM  H(h) = −Σ ZᵢZᵢ₊₁ − h Σ Xᵢ,  knob B = ∂H/∂h = −Σ Xᵢ.  Exactly
 solvable: the quantum phase transition sits at h_c = 1 (ordered/ferromagnetic for
@@ -41,7 +43,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 import numpy as np
 from scipy import sparse as sp
-from scipy.sparse.linalg import LinearOperator, cg
+from scipy.sparse.linalg import LinearOperator, bicgstab
 import resona
 
 rng = np.random.default_rng(7)
@@ -55,19 +57,28 @@ def build_tfim_parts(n):
     for i in range(n):
         j = (i + 1) % n
         diag -= (1 - 2 * ((states >> i) & 1)) * (1 - 2 * ((states >> j) & 1))
-    rows = np.repeat(states, n)
+    rows = np.tile(states, n)            # bit-major, to align with cols below
     cols = np.concatenate([states ^ (1 << i) for i in range(n)])
     Hx = sp.coo_matrix((-np.ones(D * n), (rows, cols)), shape=(D, D)).tocsr()
     return D, diag, Hx
 
 
 def susceptibility(matH, matB, N, E0, eta, n_probe=6, tol=1e-5):
-    """Φ_η(E₀) = (η/π)² Tr[B R B R],  R=((H−E₀)²+η²)⁻¹ — matvecs + CG only."""
-    def AzA(v):                                            # (H−E₀)² + η²
-        w = matH(v) - E0 * v
-        return matH(w) - E0 * w + eta ** 2 * v
-    Aop = LinearOperator((N, N), matvec=AzA)
-    R = lambda z: cg(Aop, z, rtol=tol, maxiter=5000)[0]    # resolvent by CG
+    """Φ_η(E₀) = (η/π)² Tr[B R B R],  R=((H−E₀)²+η²)⁻¹ — matvecs + shifted solves.
+
+    R factorises as ((H−E₀)−iη)⁻¹·((H−E₀)+iη)⁻¹: two COMPLEX-SHIFTED solves whose
+    condition number is the √ of the squared operator's.  Plain CG on the squared
+    form (H−E₀)²+η² is too ill-conditioned to reach tolerance (it stalls at maxiter
+    and returns garbage 10²–10³× too large); the shifted solves converge cleanly.
+    """
+    Pp = LinearOperator((N, N), dtype=complex,
+                        matvec=lambda v: matH(v) - E0 * v + 1j * eta * v)   # (H−E₀)+iη
+    Pm = LinearOperator((N, N), dtype=complex,
+                        matvec=lambda v: matH(v) - E0 * v - 1j * eta * v)   # (H−E₀)−iη
+    def R(z):                                              # ((H−E₀)²+η²)⁻¹ z, real
+        u, _ = bicgstab(Pp, z.astype(complex), rtol=tol, maxiter=5000)
+        w, _ = bicgstab(Pm, u, rtol=tol, maxiter=5000)
+        return w.real
     acc = 0.0
     for _ in range(n_probe):                               # Hutchinson trace
         x = rng.choice([-1.0, 1.0], size=N)
@@ -81,7 +92,7 @@ if __name__ == "__main__":
     print(f"QUANTUM PHASE TRANSITION located matrix-free — TFIM n={n} (D={1<<n})")
     print("=" * 74)
     print("  full eigh on a grid would be O(D³)·grid — infeasible.  We use only")
-    print("  E₀ (resona, matrix-free) + Φ_η (CG resolvent + Hutchinson trace).\n")
+    print("  E₀ (resona, matrix-free) + Φ_η (shifted-resolvent + Hutchinson trace).\n")
     D, diag, Hx = build_tfim_parts(n)
     matB = lambda v: Hx @ v
     hs = np.linspace(0.5, 1.5, 11)
@@ -112,7 +123,7 @@ if __name__ == "__main__":
     print("\n" + "=" * 74)
     print("  The transition is a DEFECT in the response: as the gap closes at h_c the")
     print("  ground state becomes susceptible to the knob and Φ_η turns on sharply.")
-    print("  Read entirely from H·v products (CG resolvent + Hutchinson trace) and a")
+    print("  Read from H·v products (shifted-resolvent solves + Hutchinson trace) and a")
     print("  matrix-free ground energy — no diagonalization, O(D) per point.  The same")
     print("  defect object that locates avoided crossings, at the quantum critical point.")
     print("=" * 74)

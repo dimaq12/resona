@@ -20,16 +20,21 @@ from resona import Spectral
 rng = np.random.default_rng(0)
 
 
-def region_spectral(region, patch=8, stride=3):
-    """Spectral object of the region's patch covariance — the SAME recipe as
-    signals.py's trajectory covariance: build a matvec, hand it to the hub."""
+def region_patches(region, patch=8, stride=3):
+    """The centered patch matrix P (n_patches × patch²) of the region."""
     H, W = region.shape
     rows = []
     for i in range(0, H - patch + 1, stride):
         for j in range(0, W - patch + 1, stride):
             rows.append(region[i:i+patch, j:j+patch].ravel())
     P = np.asarray(rows, float)                       # (n_patches, patch²)
-    P = P - P.mean(0)
+    return P - P.mean(0)
+
+
+def region_spectral(region, patch=8, stride=3):
+    """Spectral object of the region's patch covariance — the SAME recipe as
+    signals.py's trajectory covariance: build a matvec, hand it to the hub."""
+    P = region_patches(region, patch, stride)
     d = P.shape[1]
     return Spectral.of(lambda v: P.T @ (P @ v), d, k=40, probes=10)   # covariance, matrix-free
 
@@ -67,14 +72,20 @@ if __name__ == "__main__":
           f"(Δ = {phi_struct_shuf-phi_struct:+.1f})")
 
     # hub readouts on the same operators — the signals.py covariance family:
-    # κ = s.condition() (dynamic range) and the top-mode energy share
-    # λ_max/Tr (= s.extreme()[1] / s.moment(1)) tell the Φ₁ story twice over.
+    # κ = s.condition() (dynamic range) and the top-mode energy share λ_max/Tr.
+    # NOTE: λ_max is captured EXACTLY by Lanczos (s.extreme()), but on a spiked
+    # operator the stochastic SLQ trace s.moment(1) is biased LOW (its scatter is
+    # ~25% here — the spike makes a handful of probe directions dominate), which
+    # would INFLATE the ratio.  For this covariance Tr(PᵀP) = ‖P‖_F² is free and
+    # EXACT (matrix-free, no eig), so we use it — the share then matches dense truth.
     print(f"\n   hub readouts (same patch-covariance operators, signals.py family):")
     print(f"   {'region':<12} {'Φ₁':>6}  {'κ = λmax/λmin':>14}  {'top-mode share':>15}")
     for tag, region in [("noise", noise), ("structured", struct),
                         ("shuffled", flat.reshape(n, n))]:
         s = region_spectral(region)
-        share = s.extreme()[1] / s.moment(1)
+        P = region_patches(region)
+        tr_exact = float(np.sum(P * P))            # Tr(PᵀP) = ‖P‖_F², exact & free
+        share = s.extreme()[1] / tr_exact          # λ_max exact / Tr exact
         print(f"   {tag:<12} {s.effective_rank():>6.1f}  {s.condition():>14.1f}  "
               f"{share:>14.1%}")
     print(f"   (structured: one mode carries most of the energy → tiny Φ₁, huge κ;")
