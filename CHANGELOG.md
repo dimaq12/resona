@@ -3,6 +3,29 @@
 All notable changes to resona.  The discipline throughout: every number below
 is printed by a test or a gallery stand, not asserted by hand.
 
+## [3.1.0] — 2026-06-20
+Close the non-Hermitian corner — `cloud` gains MOVE and COMPOSE.  Until now the
+non-self-adjoint side had only READ (the Ritz `cloud`) and TRUST (`sigma_min`,
+`pseudospectrum`, `normality`); the spectral-flow (∂_k) and free-convolution verbs
+were Hermitian-only.  Both are now closed, matrix-free, verified against dense
+ground truth in the complex plane.  140 tests green.
+
+- **MOVE — `resona.cloud_flow`** (the non-Hermitian spectral Jacobian).  Biorthogonal
+  Hellmann–Feynman:  ∂λ_i/∂k_j = (u_i* B_j v_i)/(u_i* v_i)  with left AND right
+  eigenvectors (reduces to `wkernel` for Hermitian A).
+  - `cloud_wkernel` vs dense finite-difference on a non-normal family: **8.3e-9**.
+  - `cloud_track` follows a complex eigenvalue along a path, == dense `eig` continuation.
+  - `exceptional_point` / phase rigidity: |u* v| → 0 LOCATES an EP matrix-free; at the
+    EP ∂λ diverges like ε^{-1/2} (the feature) — demo `[[0,1],[k,0]]`, min|u*v|=6.3e-5.
+- **COMPOSE / plane-READ — `resona.brown`** (the Brown measure via Hermitization).
+  S(z)=(1/2N)Tr log((A−z)*(A−z)) (matrix-free SLQ log-det), μ_A=(1/2π)Δ_z S.
+  - `brown_measure` reproduces the **circular law** for a Ginibre operator: mass-in-disk
+    0.97, interior density **0.318 = 1/π**; matrix-free S(z) matches dense to <0.05.
+  - `brown_boxplus` — the Brown measure of a *-FREE sum A⊞B, via the per-z free
+    convolution of the two hermitized singular measures.  Tuned with atom-binning
+    (800→80, ~19× per point) + a dense-SVD path: **19 s** on a 19×19 grid (was a
+    timeout), with **97 % of eig(A+B) inside the predicted support**.
+
 ## [3.0.1] — 2026-06-19
 Example-revision epic — bring every gallery stand up to the v3 spirit (use the
 primitives, not hand-rolled numpy), give the new 3.0 reads live showcases, and a

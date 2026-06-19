@@ -21,14 +21,15 @@ matrix-free — and from which every spectral functional is read.
 """
 from .spectral import (Spectral, apply, quadform, local_spectrum, local_density,
                        from_measure, from_eigenbasis, synthesize, grad_trace)
-from . import wkernel, lift, beta, defect, free, subordination, cost, flow, solve, thermal
+from . import (wkernel, lift, beta, defect, free, subordination, cost, flow,
+               solve, thermal, brown, cloud_flow)
 from .cloud import cloud, Cloud
 
 #: convenience: ``resona.of(matvec, N)`` == ``Spectral.of(matvec, N)``
 of = Spectral.of
 
-__version__ = "3.0.1"
+__version__ = "3.1.0"
 __all__ = ["Spectral", "of", "apply", "quadform", "local_spectrum", "local_density",
            "from_measure", "from_eigenbasis", "synthesize", "grad_trace", "cloud",
            "Cloud", "wkernel", "lift", "beta", "defect", "free", "subordination",
-           "cost", "flow", "solve", "thermal"]
+           "cost", "flow", "solve", "thermal", "brown", "cloud_flow"]
