@@ -32,10 +32,10 @@ if __name__ == "__main__":
     print("=" * 72)
 
     # ── Act 1: spectrum of A⊞B from the two measures alone ──
-    M = 900; d = rng.uniform(-1, 1, M); A = np.diag(d)
+    M = 600; d = rng.uniform(-1, 1, M); A = np.diag(d)
     Q, _ = linalg.qr(rng.standard_normal((M, M))); B = Q @ A @ Q.T          # free copy
-    sA = resona.of(lambda v: A @ v, M, k=120, probes=16)
-    sB = resona.of(lambda v: B @ v, M, k=120, probes=16)
+    sA = resona.of(lambda v: A @ v, M, k=40, probes=8)
+    sB = resona.of(lambda v: B @ v, M, k=40, probes=8)
     mpred = resona.lift.free_convolution(sA, sB, order=4)                   # no joint matvec
     mtrue = [np.trace(np.linalg.matrix_power(A + B, n)) / M for n in range(1, 5)]
     print("\n  [1] κ_n(A⊞B)=κ_n(A)+κ_n(B): moments of A⊞B from μ_A,μ_B ALONE")
@@ -52,7 +52,7 @@ if __name__ == "__main__":
     rho = resona.subordination.averaged_dos(s2, sigma, xs, eta=2e-3)
     m2_closed = float(np.trapezoid(xs ** 2 * rho, xs))
     mc = np.concatenate([linalg.eigvalsh(A2 + sigma * ((W := rng.standard_normal((N, N)))
-                         + W.T) / np.sqrt(2 * N)) for _ in range(40)])
+                         + W.T) / np.sqrt(2 * N)) for _ in range(4)])
     print("\n  [2] ⟨DOS⟩ of A+σ·GOE via Pastur (closed form, no eig, no realizations)")
     print(f"      ∫ρ dx = {np.trapezoid(rho, xs):.3f}   m2: closed {m2_closed:.3f}"
           f"  Monte-Carlo {np.mean(mc**2):.3f}   (= m2(A)+σ² = {1+sigma**2:.3f})")

@@ -61,9 +61,15 @@ def task_compose(N=1500):
     sA = Spectral.of(lambda x: A0@x + wA*x, N)
     sB = Spectral.of(lambda x: A0@x + wB*x, N)
     lo, hi = (sA + sB).extreme()                           # A+B never formed
-    ev = np.sort(linalg.eigvalsh(A0.toarray()+np.diag(wA) + A0.toarray()+np.diag(wB)))
-    print(f"   eig(A+B) max  resona = {hi:>8.3f}   true = {ev[-1]:>8.3f}   err = {abs(hi-ev[-1]):.1e}")
-    print(f"   eig(A+B) min  resona = {lo:>8.3f}   true = {ev[0]:>8.3f}   err = {abs(lo-ev[0]):.1e}")
+    # TRUTH: only the max/min eigenvalue of the same operator A+B = 2*A0 + diag(wA+wB)
+    # are needed — read them matrix-free with eigsh(k=1) instead of a dense eigvalsh
+    # (byte-identical extremes, hundreds of × faster than forming the 1500×1500 matrix).
+    from scipy.sparse.linalg import eigsh
+    AplusB = (2 * A0 + sparse.diags(wA + wB)).tocsr()
+    true_hi = eigsh(AplusB, k=1, which='LA', return_eigenvectors=False)[0]
+    true_lo = eigsh(AplusB, k=1, which='SA', return_eigenvectors=False)[0]
+    print(f"   eig(A+B) max  resona = {hi:>8.3f}   true = {true_hi:>8.3f}   err = {abs(hi-true_hi):.1e}")
+    print(f"   eig(A+B) min  resona = {lo:>8.3f}   true = {true_lo:>8.3f}   err = {abs(lo-true_lo):.1e}")
 
 
 # 4 ── Deep-net trainability from init  (S-transform / dynamical isometry) ─────

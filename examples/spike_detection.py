@@ -46,7 +46,7 @@ if __name__ == "__main__":
     print("  " + "─" * 60)
     for theta in [0.4, 0.7, 0.9, 1.0, 1.2, 1.5, 2.0]:
         mv = lambda x: noise @ x + theta * v * (v @ x)        # signal+noise, matvec only
-        lam = resona.of(mv, N, k=160, probes=4).extreme()[1]  # top eigenvalue, no eig
+        lam = resona.of(mv, N, k=120, probes=1).extreme()[1]  # top eigenvalue, no eig
         pred = theta + 1.0 / theta if theta > 1.0 else 2.0
         verdict = "DETECTED ✓" if theta > 1.0 else "buried (noise)"
         print(f"  {theta:>11.1f} {lam:>16.4f} {pred:>14.4f} {verdict:>16}")

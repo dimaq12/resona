@@ -30,8 +30,8 @@ if __name__ == "__main__":
     M = 900
     A = np.diag(rng.uniform(-1.5, 1.5, M))                              # structured spectrum
     Q, _ = linalg.qr(rng.standard_normal((M, M))); B = Q @ A @ Q.T       # a FREE copy
-    sA = resona.of(lambda v: A @ v, M, k=120, probes=16)                # PROBE
-    sB = resona.of(lambda v: B @ v, M, k=120, probes=16)
+    sA = resona.of(lambda v: A @ v, M, k=40, probes=16)                 # PROBE
+    sB = resona.of(lambda v: B @ v, M, k=40, probes=16)
     print(f"  PROBE:    support(A) = [{sA.extreme()[0]:+.2f}, {sA.extreme()[1]:+.2f}]"
           f"   (structured, uniform spectrum)")
     fd = resona.free.freeness_defect(lambda v: A @ v, lambda v: B @ v, M, probes=20)
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     banner("ACT 2 — the SAME composition is a FLOW with a SHOCK  (lift ⟂ resolvent)")
     wg = np.linspace(0.05, 0.4, 6)
     RA = resona.lift.r_transform(sA, wg); RB = resona.lift.r_transform(sB, wg)
-    sAB = resona.of(lambda v: (A + B) @ v, M, k=110, probes=8)
+    sAB = resona.of(lambda v: (A + B) @ v, M, k=40, probes=8)
     RAB = resona.lift.r_transform(sAB, wg)
     print(f"  LIFT:     R_(A⊞B) = R_A + R_B  →  rel.err = "
           f"{np.max(np.abs(RAB-(RA+RB)))/np.max(np.abs(RAB)):.4f}  (shock LINEAR in R)")

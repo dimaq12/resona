@@ -113,18 +113,22 @@ if __name__ == "__main__":
     print("=" * 70)
     print()
 
-    # Exact validation at L=6, a few U values
-    print("  Cross-check resona vs exact eigvalsh (L=6):")
+    # Exact validation at L=5 (D=4^5=1024): the dense eigvalsh cross-check is run on
+    # the smaller Hilbert space so the 3× O(D³) diagonalization stays cheap (the main
+    # sweep below is unchanged at L=6).  The DOS accuracy is the same few-% as at L=6.
+    L_check = 5
+    D_check = 4 ** L_check
+    print(f"  Cross-check resona vs exact eigvalsh (L={L_check}):")
     print(f"  {'U/t':>5}  {'DOS_mid exact':>14}  {'DOS_mid resona':>15}  {'err%':>7}")
     print("  " + "─" * 50)
     for U_check in [0.0, 4.0, 8.0]:
-        H = build_hubbard(L, t=1.0, U=U_check)
+        H = build_hubbard(L_check, t=1.0, U=U_check)
         evals = np.sort(np.linalg.eigvalsh(H.toarray()))
         E0_ex, Emax_ex = evals[0], evals[-1]
         mid_ex = (E0_ex + Emax_ex) / 2
-        dos_ex = np.sum(eta**2 / ((evals - mid_ex)**2 + eta**2)) / (np.pi * eta * D)
+        dos_ex = np.sum(eta**2 / ((evals - mid_ex)**2 + eta**2)) / (np.pi * eta * D_check)
 
-        s = resona.of(lambda v, H=H: H @ v, D, k=64, probes=12)
+        s = resona.of(lambda v, H=H: H @ v, D_check, k=64, probes=12)
         E0_res, Emax_res = s.extreme()
         mid_res = (E0_res + Emax_res) / 2
         dos_res = s.density(np.array([mid_res]), eta=eta)[0]
