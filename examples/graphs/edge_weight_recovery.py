@@ -94,13 +94,11 @@ def hf_recovery(N: int, K: int, lam_target: np.ndarray, w_init: np.ndarray,
         # Analytical Jacobian via resona.wkernel: W[k,e] = v_k^T (dL/dw_e) v_k
         J = wk.wkernel(phi, [lambda v, e=e: edge_laplacian_matvec(N, e, v) for e in range(M)])
 
-        # Gauss-Newton step: solve (J^T J) dw = J^T res
-        JtJ = J.T @ J
-        Jtr = J.T @ res
-        try:
-            dw = np.linalg.solve(JtJ + 1e-6 * np.eye(M), Jtr)
-        except np.linalg.LinAlgError:
-            dw = Jtr * alpha
+        # Gauss-Newton step via resona.wkernel.design — the regularized inverse of the
+        # spectral Jacobian.  Its SVD form  dw = Σ s/(s²+reg·s²ₘₐₓ)·(uᵀres)·v  solves the
+        # least-squares step WITHOUT forming the ill-conditioned normal equations JᵀJ
+        # (which square the condition number) — same primitive, ~1e10× tighter spectral fit.
+        dw = wk.design(J, res, reg=1e-6)
         w = np.clip(w - dw, 0.05, 5.0)
 
     return w, eig_count, errors

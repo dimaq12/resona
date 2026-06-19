@@ -124,9 +124,9 @@ for step in range(HF_STEPS):
     hf_errors.append(err)
 
     J = spectral_jacobian(phi_cur, edge_laps, K)      # O(K·M) — one eigsolve
-    # Gauss-Newton step: (J^T J + λI) dw = J^T r
-    lam_reg = 1e-3 * np.trace(J.T @ J) / M
-    dw = np.linalg.solve(J.T @ J + lam_reg * np.eye(M), J.T @ residual)
+    # Gauss-Newton step via resona.wkernel.design — the regularized inverse of the
+    # spectral Jacobian (SVD form, Tikhonov dial reg).  No hand-formed normal equations.
+    dw = wk.design(J, residual, reg=1e-3)
     w_hf = np.clip(w_hf - dw, 0.05, 5.0)
 
 hf_ms = (time.perf_counter() - t_hf) * 1000
