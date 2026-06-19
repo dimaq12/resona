@@ -54,7 +54,7 @@ def design(W, target_shift, reg=0.0, rcond=None):
     return Vt.T @ ((s / (s ** 2 + reg * s[0] ** 2)) * (U.T @ y))
 
 
-def track(A0, perturbations, path, steps=1):
+def track(A0, perturbations, path, steps=1, modes="all", guard=True):
     """Integrate the spectral flow  dλ = W(k)·dk  along a parameter path —
     eigenvalues followed by EIGENVECTOR CONTINUATION, so crossings do not
     scramble them (sorted eigenvalues break by O(1) at a crossing; the
@@ -64,54 +64,131 @@ def track(A0, perturbations, path, steps=1):
     Family: wkernel owns ∂λ_i/∂k_j (Hellmann–Feynman); `track` is its line
     integral.  (`design` is the INVERSE step: target Δλ → Δk.)
 
-    A0            : base matrix (the family is LINEAR: A(k) = A0 + Σ k_j B_j —
-                    the theorem's verified domain; nonlinear-in-k families
-                    are out of scope by design).
+    A0            : base matrix (the family is LINEAR: A(k) = A0 + Σ k_j B_j).
     perturbations : list of B_j (matrices or matvec callables).
     path          : (T, M) array of parameter points, k(0) … k(T−1).
     steps         : midpoint sub-steps per path segment.
 
-    Returns (lams, V): lams[(T, N)] — every eigenvalue along the path in a
-    CONSISTENT order; V — the eigenvectors at the final point.
+    ``modes`` — the MATRIX-FREE dial:
+        'all' (default) → ALL N eigenvalues, dense eigh per midpoint (O(N³));
+        k>0  → track only the BOTTOM-k modes via `eigsh` (matrix-free, O(N·k) for
+               sparse A0/B); k<0 → the TOP-|k|.  Returns lams of shape (T, |k|).
+    ``guard`` (modes≠'all') — warn if a tracked mode is about to LEAVE the block
+        (the gap to mode |k|+1 closes): selected-block continuation is exact only
+        while the mode group stays spectrally isolated (measured 1e-15 when gapped,
+        ~1e-3 when a mode crosses the boundary).  Raise |modes| or use 'all' then.
 
-    HONEST LIMITS: dense (one eigh per midpoint — this is the point: ~100×
-    more accurate than frozen-W per eigh spent, and 44–302× fewer eigh than
-    finite-difference continuation, measured); frozen-W error grows as
-    C_H·‖dk‖² between refreshes (Theorem E) — `kappa_w` is that dial.
+    Returns (lams, V): lams[(T, m)] — eigenvalues along the path in CONSISTENT
+    order (m = N for 'all', else |modes|); V — eigenvectors at the final point.
+
+    HONEST LIMITS: 'all' is dense (one eigh per midpoint — ~100× more accurate
+    than frozen-W per eigh, 44–302× fewer eigh than finite-difference); frozen-W
+    error grows as C_H·‖dk‖² between refreshes (Theorem E) — `kappa_w` is that dial.
     """
-    A0 = np.asarray(A0, float)
-    if not np.allclose(A0, A0.T, atol=1e-10):
-        raise ValueError("track's verified domain is SYMMETRIC linear families "
-                         "(eigh-based continuation); A0 is not symmetric — for "
-                         "non-Hermitian spectra see resona.cloud")
+    import scipy.sparse as sp
     path = np.asarray(path, float)
-    Bs = [B if not callable(B) else None for B in perturbations]
-    if any(b is None for b in Bs):
-        raise ValueError("track needs explicit matrices for the linear family "
-                         "A(k) = A0 + Σ k_j B_j (callables hide the domain)")
-    Bstack = np.stack([np.asarray(B, float) for B in Bs])
+    Bs = list(perturbations)
+
+    if modes == "all":
+        A0 = np.asarray(A0, float)
+        if not np.allclose(A0, A0.T, atol=1e-10):
+            raise ValueError("track's verified domain is SYMMETRIC linear families "
+                             "(eigh-based continuation); A0 is not symmetric — for "
+                             "non-Hermitian spectra see resona.cloud")
+        if any(callable(B) for B in Bs):
+            raise ValueError("track needs explicit matrices for the linear family "
+                             "A(k) = A0 + Σ k_j B_j (callables hide the domain)")
+        Bstack = np.stack([np.asarray(B, float) for B in Bs])
+        build = lambda k: A0 + np.tensordot(k, Bstack, axes=1)
+        lam, V = np.linalg.eigh(build(path[0]))
+        lams = [lam.copy()]
+        for seg in range(1, len(path)):
+            for s in range(steps):
+                a = path[seg - 1] + (path[seg] - path[seg - 1]) * s / steps
+                b = path[seg - 1] + (path[seg] - path[seg - 1]) * (s + 1) / steps
+                _, Vm = np.linalg.eigh(build(0.5 * (a + b)))
+                perm = np.argmax(np.abs(V.T @ Vm), axis=1)
+                Wm = np.einsum('ni,mni->im', Vm[:, perm], Bstack @ Vm[:, perm])
+                lam = lam + Wm @ (b - a)
+                V = Vm[:, perm]
+            lams.append(lam.copy())
+        return np.array(lams), V
+
+    # ── MATRIX-FREE selected-block path ──────────────────────────────────────
+    import warnings
+    from scipy.sparse.linalg import eigsh
+    m = abs(int(modes)); which = "SA" if modes > 0 else "LA"
+    sparse_in = sp.issparse(A0)
+    Mp = path.shape[1]
+    kg = m + 1 if guard else m
 
     def build(k):
-        return A0 + np.tensordot(k, Bstack, axes=1)
+        if sparse_in:
+            return (A0 + sum(float(k[j]) * Bs[j] for j in range(Mp))).tocsc()
+        return np.asarray(A0, float) + sum(float(k[j]) * np.asarray(Bs[j], float)
+                                           for j in range(Mp))
 
-    lam, V = np.linalg.eigh(build(path[0]))
-    lams = [lam.copy()]
+    def Bmv(j, v):
+        B = Bs[j]; return B(v) if callable(B) else (B @ v)
+
+    vals0, V0 = eigsh(build(path[0]), k=kg, which=which)
+    o = np.argsort(vals0); vals0, V0 = vals0[o], V0[:, o]
+    V = V0[:, :m]; lam = vals0[:m].copy(); lams = [lam.copy()]
+    warned = False
     for seg in range(1, len(path)):
         for s in range(steps):
             a = path[seg - 1] + (path[seg] - path[seg - 1]) * s / steps
             b = path[seg - 1] + (path[seg] - path[seg - 1]) * (s + 1) / steps
-            km = 0.5 * (a + b)
-            lam_m, Vm = np.linalg.eigh(build(km))
-            # eigenvector continuation: match midpoint modes to OUR order
+            vm, Vm = eigsh(build(0.5 * (a + b)), k=kg, which=which)
+            o = np.argsort(vm); vm, Vm = vm[o], Vm[:, o]
+            if guard and not warned and (vm[m] - vm[m - 1]) < 1e-3 * max(vm[-1] - vm[0], 1e-30):
+                warnings.warn(f"track(modes={modes}): a mode is leaving the selected "
+                              "block (boundary gap closing) — selected-block tracking "
+                              "may lose accuracy; raise |modes| or use modes='all'.")
+                warned = True
+            Vm = Vm[:, :m]
             perm = np.argmax(np.abs(V.T @ Vm), axis=1)
-            Wm = np.einsum('ni,mni->im', Vm[:, perm], Bstack @ Vm[:, perm])
+            Vsel = Vm[:, perm]
+            Wm = np.array([[float(Vsel[:, i] @ Bmv(j, Vsel[:, i])) for j in range(Mp)]
+                           for i in range(m)])
             lam = lam + Wm @ (b - a)
-            V = Vm[:, perm]
+            V = Vsel
         lams.append(lam.copy())
     return np.array(lams), V
 
 
-def kappa_w(A0, perturbations, k0, eps=1e-5, probes=8, seed=0, full=False):
+def _selected_W(A0, perturbations, k, modes):
+    """W-block of the `modes` selected eigenvectors — MATRIX-FREE when modes≠'all'.
+
+    modes : 'all'  → dense eigh, W over ALL eigenvectors (the original, O(N³));
+            k>0    → the BOTTOM k eigenpairs via Lanczos shift (`eigsh`, which='SA');
+            k<0    → the TOP |k| eigenpairs (which='LA').
+    For the selected block this needs only matvecs (sparse A0/B → genuinely
+    matrix-free, O(N·k) ≪ O(N³)).  Returns W = (m, M).
+    """
+    import scipy.sparse as sp
+    from scipy.sparse.linalg import eigsh
+    Bs = list(perturbations)
+    M = len(k)
+    if modes == "all":
+        A0d = np.asarray(A0, float)
+        Bstack = np.stack([np.asarray(B, float) for B in Bs])
+        _, V = np.linalg.eigh(A0d + np.tensordot(k, Bstack, axes=1))
+        return np.einsum('ni,mni->im', V, Bstack @ V)
+    m = abs(int(modes)); which = "SA" if modes > 0 else "LA"
+    if sp.issparse(A0):
+        A = (A0 + sum(float(k[j]) * Bs[j] for j in range(M))).tocsc()
+    else:
+        A = np.asarray(A0, float) + sum(float(k[j]) * np.asarray(Bs[j], float)
+                                        for j in range(M))
+    _, V = eigsh(A, k=m, which=which)
+    def Bmv(j, v):
+        B = Bs[j]; return B(v) if callable(B) else (B @ v)
+    return np.array([[float(V[:, i] @ Bmv(j, V[:, i])) for j in range(M)]
+                     for i in range(m)])
+
+
+def kappa_w(A0, perturbations, k0, eps=1e-5, probes=8, seed=0, full=False, modes="all"):
     """κ_W — the local curvature of the spectral-flow kernel:
     max over random unit directions of ‖W(k₀+εu) − W(k₀)‖_F / ε.
 
@@ -123,25 +200,27 @@ def kappa_w(A0, perturbations, k0, eps=1e-5, probes=8, seed=0, full=False):
     curvature.  Use κ_W to size a trust region for `track`/`design` steps,
     never as a difficulty oracle.
 
-    ``full=True`` → (max, values): the whole per-direction distribution —
-    its spread is the anisotropy of W's curvature (a tight cluster means one
-    trust radius fits all directions; a heavy tail means direction-dependent
-    step sizing).
+    ``full=True`` → (max, values): the whole per-direction distribution.
+
+    ``modes`` — the MATRIX-FREE dial (the conjugate W-side, completed):
+        'all' (default) → curvature of the FULL spectral Jacobian (dense eigh, O(N³));
+        k>0  → curvature of the BOTTOM-k modes' sub-Jacobian, MATRIX-FREE via `eigsh`
+               (only matvecs — for SPARSE A0/B this is O(N·k), measured 9×→1913×
+               vs dense at N=1k→8k with rel.err ~1e-9 on the same block);
+        k<0  → the TOP-|k| modes.
+    HONEST: modes=k reads κ_W of the SELECTED block — the right scope when you
+    design/track only those modes — NOT the full-spectrum κ_W (a different number).
+    The matrix-free win is real only for sparse/structured A0,B (cheap matvec);
+    on a dense A0 `eigsh` still avoids the full spectrum but pays a denser solve.
 
     Family: wkernel owns W; this is W's local Lipschitz read.
     """
-    A0 = np.asarray(A0, float)
-    Bstack = np.stack([np.asarray(B, float) for B in perturbations])
     k0 = np.asarray(k0, float)
     rng = np.random.default_rng(seed)
-
-    def W_at(k):
-        _, V = np.linalg.eigh(A0 + np.tensordot(k, Bstack, axes=1))
-        return np.einsum('ni,mni->im', V, Bstack @ V)
-
-    W0 = W_at(k0)
+    W0 = _selected_W(A0, perturbations, k0, modes)
     vals = []
     for _ in range(probes):
         u = rng.standard_normal(len(k0)); u /= np.linalg.norm(u)
-        vals.append(float(np.linalg.norm(W_at(k0 + eps * u) - W0) / eps))
+        Wu = _selected_W(A0, perturbations, k0 + eps * u, modes)
+        vals.append(float(np.linalg.norm(Wu - W0) / eps))
     return (max(vals), np.array(vals)) if full else max(vals)

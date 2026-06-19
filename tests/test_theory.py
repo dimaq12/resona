@@ -172,6 +172,99 @@ def test_wkernel_design_tikhonov():
     assert np.linalg.norm(dk) < np.linalg.norm(dk0) + 1e-9         # regularized = smaller
 
 
+def test_kappa_w_modes_matches_dense_block():
+    """Matrix-free κ_W (modes=k via eigsh) == dense κ_W on the SAME bottom-k block."""
+    import scipy.sparse as sp
+    N, m = 600, 6
+    d = rng.standard_normal(N); o1 = rng.standard_normal(N - 1) * 0.8
+    A0 = sp.diags([o1, d, o1], [-1, 0, 1]).tocsc()
+    B1 = sp.diags([np.ones(N - 1) * 0.5, np.zeros(N), np.ones(N - 1) * 0.5], [-1, 0, 1]).tocsc()
+    B2 = sp.diags([np.ones(N - 2) * 0.3, np.ones(N - 2) * 0.3], [-2, 2]).tocsc()
+    Bs = [B1, B2]; k0 = np.array([0.1, 0.05])
+
+    # dense reference: full eigh -> bottom-m vectors -> κ_W, SAME random directions
+    A0d, Bd = A0.toarray(), [B.toarray() for B in Bs]
+
+    def W_dense(k):
+        _, V = np.linalg.eigh(A0d + sum(float(k[j]) * Bd[j] for j in range(2)))
+        V = V[:, :m]
+        return np.array([[float(V[:, i] @ (Bd[j] @ V[:, i])) for j in range(2)] for i in range(m)])
+
+    r = np.random.default_rng(0); W0 = W_dense(k0); vals = []
+    for _ in range(4):
+        u = r.standard_normal(2); u /= np.linalg.norm(u)
+        vals.append(float(np.linalg.norm(W_dense(k0 + 1e-5 * u) - W0) / 1e-5))
+    kd = max(vals)
+
+    km = resona.wkernel.kappa_w(A0, Bs, k0, modes=m, probes=4, seed=0)
+    assert abs(kd - km) / max(abs(kd), 1e-30) < 1e-6              # identical to dense
+
+
+def test_kappa_w_modes_all_unchanged():
+    """modes='all' (default) reproduces the original dense full-spectrum κ_W."""
+    n = 40; A0 = _sym(n); Bs = [_sym(n) * 0.1]
+    kf = resona.wkernel.kappa_w(A0, Bs, [0.2], probes=4, seed=1)             # default = 'all'
+    ka = resona.wkernel.kappa_w(A0, Bs, [0.2], probes=4, seed=1, modes="all")
+    assert kf == ka and kf > 0
+
+
+def test_track_modes_matches_dense():
+    """Matrix-free track(modes=k) == dense track on the same bottom-k block (same method)."""
+    import scipy.sparse as sp
+    N = 400
+    d = np.sort(rng.standard_normal(N)) * 0.3
+    A0 = sp.diags(d).tocsc()
+    B1 = sp.diags([np.ones(N - 1) * 0.2, np.zeros(N), np.ones(N - 1) * 0.2], [-1, 0, 1]).tocsc()
+    path = np.linspace(0, 0.2, 5).reshape(-1, 1)
+    lams_mf, _ = resona.wkernel.track(A0, [B1], path, steps=2, modes=4)
+    lams_all, _ = resona.wkernel.track(A0.toarray(), [B1.toarray()], path, steps=2, modes="all")
+    diff = np.max(np.abs(np.sort(lams_mf, axis=1) - np.sort(lams_all[:, :4], axis=1)))
+    assert diff < 1e-10                                # identical to dense, same method
+    assert lams_mf.shape == (5, 4)                     # returns the selected block only
+
+
+def test_track_modes_gap_guard():
+    """guard warns when a mode is about to leave the selected block (near-degenerate boundary)."""
+    import warnings
+    N = 60; diag = np.arange(N, dtype=float); diag[4] = diag[3] + 3e-4   # block boundary near-degenerate
+    A0 = np.diag(diag); B = _sym(N) * 1e-4                               # tiny B keeps the gap small
+    with warnings.catch_warnings(record=True) as wl:
+        warnings.simplefilter("always")
+        resona.wkernel.track(A0, [B], np.linspace(0, 1, 3).reshape(-1, 1), steps=1, modes=4, guard=True)
+        assert any("leaving the selected block" in str(x.message) for x in wl)
+
+
+def test_normality_zero_for_normal_and_matfree_structured():
+    """normality=0 for symmetric (normal); matrix-free matches dense on a structured op."""
+    import scipy.sparse as sp
+    N = 400
+    # (a) symmetric ⇒ exactly normal ⇒ energy 0
+    S = _sym(N)
+    e0, _ = resona.defect.normality(lambda x: S @ x, N=N, probes=16)
+    assert e0 < 1e-18
+    # (b) structured non-symmetric: matrix-free Hutchinson matches the dense energy <2%
+    d = rng.standard_normal(N); up = rng.standard_normal(N - 1); lo = rng.standard_normal(N - 1) * 0.3
+    A = sp.diags([lo, d, up], [-1, 0, 1]).tocsc()
+    dense = float(np.linalg.norm((A @ A.T - A.T @ A).toarray()) ** 2)
+    est, se = resona.defect.normality(lambda x: A @ x, N=N, rmatvec=lambda x: A.T @ x, probes=48)
+    assert abs(est - dense) / dense < 0.02
+    # exact ndarray path is deterministic
+    ev, se2 = resona.defect.normality(A.toarray())
+    assert abs(ev - dense) / dense < 1e-9 and se2 == 0.0
+
+
+def test_normality_dense_robust_all_seeds():
+    """Rademacher + median-of-means: even a DENSE random op is <3% on every seed
+    (regression — Gaussian seed=0 here used to read 49.8% off)."""
+    N = 400
+    M = np.random.default_rng(0).standard_normal((N, N))
+    true = float(np.linalg.norm(M @ M.T - M.T @ M) ** 2)
+    for seed in range(5):
+        est, _ = resona.defect.normality(lambda x: M @ x, N=N,
+                                         rmatvec=lambda x: M.T @ x, seed=seed)
+        assert abs(est - true) / true < 0.03
+
+
 def test_rie_clean_sample_covariance():
     # free deconvolution of Marchenko-Pastur noise: must beat the raw empirical
     # covariance and come close to the oracle (best possible with E's basis)
