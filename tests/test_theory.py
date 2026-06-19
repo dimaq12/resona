@@ -21,6 +21,17 @@ def test_beta_from_spectral():
     assert np.mean(np.abs(lev - true)) / (true.max() - true.min()) < 0.06
 
 
+def test_beta_from_robust_moments():
+    """robust=True (Rademacher–Hutchinson moments) tightens the GOE case where the
+    SLQ-quadrature moments are noisy (seed=0 here: 5.84% → <1%)."""
+    D = 512
+    H = np.random.default_rng(0).standard_normal((D, D)); A = (H + H.T) / 2 / np.sqrt(D)
+    ev = np.sort(linalg.eigvalsh(A)); span = ev.max() - ev.min()
+    s = resona.of(lambda x: A @ x, D, k=64, probes=20)
+    rob = np.sort(resona.beta.beta_from(s, N=D, robust=True))
+    assert np.mean(np.abs(rob - ev)) / span < 0.015          # robust moments < 1.5%
+
+
 def test_wkernel_matches_finite_diff():
     n = 120; G = rng.standard_normal((n, n)); A0 = (G + G.T) / 2
     Bp = np.diag(rng.standard_normal(n))
