@@ -30,7 +30,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 import numpy as np
 from itertools import combinations, product
-from resona.cost import level_spacing_ratio
+from resona.cost import level_spacing_ratio, rmt_class
 from resona.lift import conserved_charge
 
 
@@ -109,9 +109,11 @@ if __name__ == "__main__":
                      ("XXZ + NNN coupling  (chaotic)  ", 1.0)]:
         ev = np.linalg.eigvalsh(build_xxz_sector(L, J2=J2))
         n = len(ev)
-        r = level_spacing_ratio(ev[int(0.15 * n):int(0.85 * n)])
+        bulk = ev[int(0.15 * n):int(0.85 * n)]
+        r = level_spacing_ratio(bulk)
+        cls, R4 = rmt_class(bulk)                     # DIAL 1b: the universality class
         verdict = "lift EXISTS" if r < 0.45 else "NO lift (chaos)"
-        print(f"    {name}  ⟨r⟩ = {r:.3f}   → {verdict}")
+        print(f"    {name}  ⟨r⟩ = {r:.3f}  rmt_class = {cls:<8}(R4={R4:+.2f})  → {verdict}")
 
     # the trap: same chaotic H, sectors NOT resolved → fake Poisson
     ev_mixed = np.linalg.eigvalsh(build_xxz_sector(L, J2=1.0, project_reflection=False))
