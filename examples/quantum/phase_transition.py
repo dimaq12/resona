@@ -43,7 +43,6 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 import numpy as np
 from scipy import sparse as sp
-from scipy.sparse.linalg import LinearOperator, bicgstab
 import resona
 
 rng = np.random.default_rng(7)
@@ -63,27 +62,21 @@ def build_tfim_parts(n):
     return D, diag, Hx
 
 
-def susceptibility(matH, matB, N, E0, eta, n_probe=6, tol=1e-5):
-    """Φ_η(E₀) = (η/π)² Tr[B R B R],  R=((H−E₀)²+η²)⁻¹ — matvecs + shifted solves.
+def susceptibility(matH, matB, N, E0, eta, n_probe=16):
+    """Φ_η(E₀) = (η/π)² Tr[B R B R], R=((H−E₀)²+η²)⁻¹ — via `resona.defect.hard_points`,
+    the library primitive for exactly this resolvent susceptibility (Hutchinson + CG,
+    matvecs only).  We call it on a single point with E=E₀(h).
 
-    R factorises as ((H−E₀)−iη)⁻¹·((H−E₀)+iη)⁻¹: two COMPLEX-SHIFTED solves whose
-    condition number is the √ of the squared operator's.  Plain CG on the squared
-    form (H−E₀)²+η² is too ill-conditioned to reach tolerance (it stalls at maxiter
-    and returns garbage 10²–10³× too large); the shifted solves converge cleanly.
+    Conditioning note (the v2.0.1 lesson, now handled inside the primitive): at this
+    η=0.5 the squared resolvent (H−E₀)²+η² is well-conditioned (η² is a large floor),
+    so the primitive's CG converges cleanly — verified bit-identical to the
+    complex-shifted ((H−E₀)±iη)⁻¹ factoring.  At SMALL η the squared form is too
+    ill-conditioned (κ²) and CG stalls; `hard_points` captures the CG flag and WARNS,
+    so a silent-garbage regression like the original can no longer pass unnoticed.
     """
-    Pp = LinearOperator((N, N), dtype=complex,
-                        matvec=lambda v: matH(v) - E0 * v + 1j * eta * v)   # (H−E₀)+iη
-    Pm = LinearOperator((N, N), dtype=complex,
-                        matvec=lambda v: matH(v) - E0 * v - 1j * eta * v)   # (H−E₀)−iη
-    def R(z):                                              # ((H−E₀)²+η²)⁻¹ z, real
-        u, _ = bicgstab(Pp, z.astype(complex), rtol=tol, maxiter=5000)
-        w, _ = bicgstab(Pm, u, rtol=tol, maxiter=5000)
-        return w.real
-    acc = 0.0
-    for _ in range(n_probe):                               # Hutchinson trace
-        x = rng.choice([-1.0, 1.0], size=N)
-        acc += float(x @ matB(R(matB(R(x)))))
-    return max((eta / np.pi) ** 2 * acc / n_probe, 0.0)    # Tr[B R B R] ≥ 0
+    _, profile = resona.defect.hard_points(lambda k: matH, [0.0], matB, N=N, E=E0,
+                                           eta=eta, probes=n_probe)
+    return float(profile[0])
 
 
 if __name__ == "__main__":
