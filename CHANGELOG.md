@@ -3,6 +3,37 @@
 All notable changes to resona.  The discipline throughout: every number below
 is printed by a test or a gallery stand, not asserted by hand.
 
+## [3.0.0] — 2026-06-19
+Matrix-free epic — kill resona's last dense O(N³), add three matrix-free spectral
+reads.  All additions are OPT-IN (the old defaults are bit-for-bit unchanged: the
+gallery diffs IDENTICAL against pre-epic `main` save timing/RNG columns; 126 tests
+green; absolute-arm certificates 4/4).  Numbers below are printed by the stand
+`examples/spectral_phenomena/matrix_free_kernel.py` and asserted in `tests/test_theory.py`.
+
+- **The cube-killer — `wkernel.kappa_w(modes=k)` / `track(modes=k)`.**  κ_W and the
+  spectral flow only need the eigenvectors of the modes you track.  `modes=k` routes
+  the block to shift-invert Lanczos (`eigsh`) instead of a full `eigh` — matrix-free
+  (only matvecs / sparse solves), O(N·k) instead of O(N³) for sparse/structured A.
+  - `kappa_w(modes=6)` vs dense κ_W on the same block: **rel.err ~1e-10**, speedup
+    **9.9× (N=800) → 114.7× (N=3000)**, growing as N³ (dense 18.2 s vs 0.16 s at N=3000).
+  - `track(modes=4)` vs dense `track` (same method): **max|Δλ| = 2.8e-15** (identical);
+    a `guard` warns when a tracked mode is about to leave the selected block.
+  - `modes='all'` (default) is the unchanged dense path (`kf == ka`, verified).
+- **`defect.normality`** — departure-from-normality energy ‖[A,A*]‖²_F, matrix-free
+  Hutchinson with **Rademacher probes + median-of-means** (the diagonal of [A,A*]ᵀ[A,A*]
+  is captured with zero variance).  Dense random N=400: **rel.err 0.06%** (a Gaussian-probe
+  seed that read 49.8% off); **= 0 exactly** for normal (Hermitian/symmetric) operators.
+- **`defect.hard_points`** — matrix-free avoided-crossing / exceptional-point locator.
+  Φ_η(k)=(η/π)²Tr[B R B R], R=((H(k)−E)²+η²)⁻¹ via Hutchinson + CG (no eig) spikes where
+  the gap closes: **argmax_k Φ_η = the avoided crossing (k=0)**, verified against the true
+  min-gap.  CG convergence flags are captured and a warning is raised on non-convergence.
+- **`cost.rmt_class`** — random-matrix universality class (Poisson/GOE/GUE/GSE) from the
+  rigidity meter R4 = ω₄(sorted unfolded spacings); the companion to `level_spacing_ratio`.
+  Strict rigidity ordering **Poisson +0.207 > GOE +0.046 > GUE −0.064** (ensemble-averaged).
+- **`beta.beta_from(robust=True)`** — optional Rademacher–Hutchinson moments for the Beta-law
+  spectrum reconstruction; a GOE seed whose SLQ-quadrature moments read **5.84% off drops to
+  0.41%**.  Default (`robust=False`) reproduces `s.levels()` exactly.
+
 ## [2.0.1] — 2026-06-13
 Bugfix — `examples/quantum/phase_transition.py` had TWO stacked bugs that the
 gallery ratchet could not see (it diffs output *stability*, not *correctness*).

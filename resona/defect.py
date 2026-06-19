@@ -158,10 +158,12 @@ def hard_points(family, ks, B, N=None, E=0.0, eta=0.08, probes=8, seed=0, cg_tol
              smoothing (smaller → sharper peak, more CG work).
     Returns (k_star, profile): the peak parameter and the Φ_η profile over ks.
     """
+    import warnings
     from scipy.sparse.linalg import LinearOperator, cg
     rng = np.random.default_rng(seed)
     ks = np.atleast_1d(np.asarray(ks, float))
     Bmv = B if callable(B) else (lambda v: B @ v)
+    unconverged = [0]
 
     def phi(Hk):
         Hmv = Hk if callable(Hk) else (lambda v: Hk @ v)
@@ -176,7 +178,10 @@ def hard_points(family, ks, B, N=None, E=0.0, eta=0.08, probes=8, seed=0, cg_tol
         Aop = LinearOperator((n, n), matvec=AzA)
 
         def R(z):
-            y, _ = cg(Aop, z, rtol=cg_tol, maxiter=2000); return y
+            y, info = cg(Aop, z, rtol=cg_tol, maxiter=2000)
+            if info != 0:                               # capture & check the CG flag
+                unconverged[0] += 1
+            return y
 
         acc = 0.0
         for _ in range(probes):
@@ -185,6 +190,9 @@ def hard_points(family, ks, B, N=None, E=0.0, eta=0.08, probes=8, seed=0, cg_tol
         return (eta / np.pi) ** 2 * acc / probes
 
     profile = np.array([phi(family(float(k))) for k in ks])
+    if unconverged[0]:
+        warnings.warn(f"hard_points: {unconverged[0]} CG solve(s) hit maxiter without "
+                      "converging — Φ_η may be unreliable; raise eta or cg_tol/maxiter.")
     return float(ks[int(np.argmax(profile))]), profile
 
 
