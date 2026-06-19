@@ -21,7 +21,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 import numpy as np
 from scipy.sparse.linalg import gmres
-from resona.defect import pseudospectrum_radius, sigma_min
+from resona.defect import pseudospectrum_radius, sigma_min, normality
 
 N = 200
 lam = np.linspace(1.0, 2.0, N)                       # the SHARED spectrum
@@ -45,13 +45,16 @@ if __name__ == "__main__":
     print(f"\n  Two triangular operators, N={N}, the SAME spectrum λ ∈ [1, 2]")
     print(f"  (so the classical dial κ = λmax/λmin = 2 predicts FAST for both).\n")
 
-    print(f"  {'operator':>12} {'eig range':>12} {'σ_min(A)':>10} {'GMRES iters':>12} {'residual':>10}")
+    print(f"  {'operator':>12} {'eig range':>12} {'‖[A,A*]‖²':>11} {'σ_min(A)':>10} {'GMRES iters':>12} {'residual':>10}")
     for name, A in [("normal", A_normal), ("non-normal", A_nonnorm)]:
         it, res = run_gmres(A)
         sm = sigma_min(A, 0.0)
+        nn, _ = normality(A)                          # GLOBAL departure-from-normality
         evr = f"[{lam[0]:.0f}, {lam[-1]:.0f}]"
         itxt = str(it) if res < 1e-8 else f"{it} (STALLED)"
-        print(f"  {name:>12} {evr:>12} {sm:>10.1e} {itxt:>12} {res:>10.1e}")
+        print(f"  {name:>12} {evr:>12} {nn:>11.2e} {sm:>10.1e} {itxt:>12} {res:>10.1e}")
+    print("  ‖[A,A*]‖²_F (defect.normality) = 0 ⇔ normal: the cheap GLOBAL scalar that")
+    print("  flags 'the spectrum will lie' BEFORE the local σ_min / pseudospectrum reads.")
 
     eps = 1e-6
     print(f"\n  The explanation is GEOMETRIC — the ε-pseudospectrum (ε={eps:.0e}):")
