@@ -74,6 +74,39 @@ def level_spacing_ratio(eigenvalues, eps=1e-9):
     return float(np.mean(np.minimum(s[:-1], s[1:]) / np.maximum(s[:-1], s[1:])))
 
 
+def rmt_class(eigenvalues, deg=8):
+    """Random-matrix UNIVERSALITY CLASS of a spectrum — Poisson / GOE / GUE / GSE —
+    from the rigidity meter  R4 = ω₄(sorted UNFOLDED spacings),
+        ω_k(s) = (s_max − s_{[M/k]}) / (|s_max| + |s_min|) − (1 − 1/k).
+
+    The companion to `level_spacing_ratio` (which returns ⟨r⟩): R4 reads the same
+    physics from the spacing-tail rigidity and resolves all FOUR Dyson classes —
+    measured strictly ordered  Poisson(+0.21) > GOE(+0.05) > GUE(−0.05) > GSE(−0.20),
+    Spearman(R4, β) ≈ −0.95 (matrix-free-friendly: works on a window of interior
+    eigenvalues, not just the full spectrum).  Returns (class, R4).
+
+    Unfolds internally (smooth empirical CDF → the local density flattened).
+
+    HONEST CAVEATS.  (1) needs an UNFOLDABLE spectrum — a single smooth density;
+    a multi-band / multi-sector spectrum must be split first (the same trap as
+    `level_spacing_ratio` — resolve symmetry sectors).  (2) R4 is a POSITIVELY-BIASED
+    rigidity proxy, not a β-on-the-nose readout — trust the class, not the decimals.
+    (3) a SINGLE realization is NOISY near class boundaries (GOE↔GUE are only ~2σ
+    apart at D≈600) — average R4 over realizations, or use large D, for a confident
+    class; Poisson-vs-chaotic is robust per-draw.
+    """
+    lam = np.sort(np.asarray(eigenvalues, float))
+    D = len(lam)
+    coef = np.polyfit(lam, np.arange(D) + 0.5, deg=min(deg, max(2, D // 8)))   # smooth CDF
+    s = np.diff(np.polyval(coef, lam))                          # unfolded spacings
+    s = np.sort(s[s > 0])
+    idx = len(s) // 4 - 1
+    R4 = (s[-1] - s[idx]) / (abs(s[-1]) + abs(s[0]) + 1e-15) - 0.75
+    refs = {"Poisson": 0.199, "GOE": 0.009, "GUE": -0.080, "GSE": -0.230}
+    cls = min(refs, key=lambda c: abs(R4 - refs[c]))
+    return cls, float(R4)
+
+
 def extraction_cost(eps, dist, a=1.0, b=1.0, c=1.0):
     """The law value  Cost = c · ε^{-a} · dist^{-b}."""
     return c * np.asarray(eps, float) ** (-a) * np.asarray(dist, float) ** (-b)

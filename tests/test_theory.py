@@ -264,6 +264,27 @@ def test_normality_zero_for_normal_and_matfree_structured():
     assert abs(ev - dense) / dense < 1e-9 and se2 == 0.0
 
 
+def test_rmt_class_separates_ensembles():
+    """R4 rigidity meter orders Poisson > GOE > GUE (ensemble-averaged — a single
+    draw is noisy near the GOE↔GUE boundary, per the function's documented caveat)."""
+    D, reps = 600, 6
+
+    def avg_R4(make):
+        return float(np.mean([resona.cost.rmt_class(make())[1] for _ in range(reps)]))
+
+    def goe():
+        Hr = rng.standard_normal((D, D)); return np.linalg.eigvalsh((Hr + Hr.T) / 2)
+
+    def gue():
+        Hc = rng.standard_normal((D, D)) + 1j * rng.standard_normal((D, D))
+        return np.linalg.eigvalsh((Hc + Hc.conj().T) / 2)
+
+    rp = avg_R4(lambda: np.sort(rng.uniform(-1, 1, D)))
+    rg, ru = avg_R4(goe), avg_R4(gue)
+    assert rp > rg > ru                                  # rigidity ordering (averaged)
+    assert resona.cost.rmt_class(np.sort(rng.uniform(-1, 1, D)))[0] == "Poisson"  # robust per-draw
+
+
 def test_hard_points_finds_avoided_crossing():
     """Φ_η divining rod: argmax_k Φ_η = the avoided crossing (k=0), matrix-free, no eig."""
     N = 200; delta = 0.04
