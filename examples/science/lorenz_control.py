@@ -142,7 +142,11 @@ if __name__ == "__main__":
     eps_ps   = 1e-3
     rad_ps   = rdefect.pseudospectrum_radius(J0, eps_ps, z0=lam_marg, r_max=50.0)
     amp_ps = rad_ps / eps_ps
-    print(f"\n  NON-NORMALITY CHECK (resona.defect.pseudospectrum_radius):")
+    nn_glob, _ = rdefect.normality(J0)               # GLOBAL Frobenius non-normality ‖[J,J*]‖²_F
+    print(f"\n  NON-NORMALITY CHECK (resona.defect):")
+    print(f"    GLOBAL  ‖[J,J*]‖²_F = {nn_glob:.0f}   (>0 ⇒ J is non-normal overall)")
+    print(f"    LOCAL at the marginal pair (below) can still read benign — the")
+    print(f"    LAG lesson: global Frobenius non-normality ≠ local pseudospectral bloom.")
     print(f"    marginal eigenvalue: {lam_marg:.4f}")
     print(f"    eps={eps_ps:.0e} bloom radius = {rad_ps:.4f}  "
           f"(x{amp_ps:.1f} the eps of a normal operator)")

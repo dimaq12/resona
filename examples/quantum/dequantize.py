@@ -29,6 +29,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 import numpy as np
 from scipy import linalg
+import resona                                          # effective_rank = the Φ₁ dial
 
 rng = np.random.default_rng(0)
 
@@ -70,6 +71,14 @@ if __name__ == "__main__":
     print(f"\n  Same s={s} as n grows 500× — accuracy ≈1, touching a vanishing fraction.")
     print(f"  The 'exponential quantum advantage' for low-rank collapses to classical")
     print(f"  sampling — it was REDUNDANT, paying for structure (low Φ₁) you sample free.")
+
+    # The DIAL itself, measured: Φ₁ = resona.effective_rank of AᵀA — matrix-free
+    # (matvec Bᵀ(Uᵀ(U(B·v))), A=U·B is never formed) — confirms the low rank we exploit.
+    Us = rng.standard_normal((2_000, r)) @ np.diag([5, 4, 3, 2, 1][:r])
+    Bs = rng.standard_normal((r, m))
+    AtA = lambda v: Bs.T @ (Us.T @ (Us @ (Bs @ v)))
+    phi1 = resona.of(AtA, m, k=40).effective_rank()
+    print(f"  Φ₁ = resona.effective_rank(AᵀA) = {phi1:.2f}  (true rank r={r}) — LOW ⇒ dequantizable.")
 
     print("\n" + "=" * 72)
     print("THE HONEST BOUNDARY (where we beat quantum, and where we don't)")
