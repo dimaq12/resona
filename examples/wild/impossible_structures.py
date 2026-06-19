@@ -17,8 +17,9 @@ WHAT.  Three data structures that sound absurd but work:
 (c) INVISIBLE STORE.  A secret bit-vector is hidden as the leading
     eigenvector of a random-looking symmetric matrix.  The matrix leaks
     nothing obvious; eigenvector decomposition is the "decryption key".
-    Recovery via resona.extreme() to confirm the spectral gap, then
-    scipy.sparse.linalg.eigsh for precision extraction.
+    Recovery via resona.extreme() to confirm the spectral gap, then a
+    matrix-free power-iteration + deflation for precision extraction —
+    the whole example is matvec-only (no dense eig solve anywhere).
 
 resona's ROLE.
 (a) The sort is certified spectrally: input and output multisets are wrapped
@@ -40,7 +41,6 @@ Run:  python3 examples/wild/impossible_structures.py
 import sys, os, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 import numpy as np
-from scipy.sparse.linalg import eigsh
 import resona
 
 rng = np.random.default_rng(42)
@@ -157,11 +157,26 @@ def H3_matvec(x):
 # resona: confirm gap and read λ_max matrix-free
 s3 = resona.of(H3_matvec, N3, k=40, probes=8)
 lam_lo3, lam_hi3 = s3.extreme()
-spectral_gap = lam_hi3 - float(np.sort(np.linalg.eigvalsh(H3))[-2])
 
-# Recover secret: leading eigenvector of H3 (largest eigenvalue)
-lam_rec, vec_rec = eigsh(H3, k=1, which='LM')
-recovered = vec_rec[:, 0]
+# Matrix-free power iteration + deflation — no dense eig solve.
+def power_iter(mv, v0, iters=200):
+    """Largest-|λ| eigenpair of a symmetric operator via plain power iteration."""
+    v = v0 / np.linalg.norm(v0)
+    lam = 0.0
+    for _ in range(iters):
+        w = mv(v)
+        lam = float(v @ w)
+        v = w / np.linalg.norm(w)
+    return lam, v
+
+# (1) leading eigenpair: λ₁ and its eigenvector = the planted secret
+lam1, recovered = power_iter(H3_matvec, np.ones(N3))
+# (2) deflate the top mode and power-iterate again for λ₂
+def H3_deflated(x):
+    return H3_matvec(x) - lam1 * float(recovered @ x) * recovered
+lam2, _ = power_iter(H3_deflated, rng.standard_normal(N3))
+spectral_gap = lam1 - lam2
+
 corr = float(abs(np.dot(secret_norm, recovered)))   # |cos θ|, 1.0 = perfect
 
 # Recover bit pattern: align sign of recovered vector, then threshold at midpoint

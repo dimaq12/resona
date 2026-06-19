@@ -6,18 +6,13 @@ over GF(2) (the field with two elements).  The monomial basis is the 2^N
 squarefree monomials {1, x0, x1, x0*x1, x0*x2, ..., x0*x1*...*x_{N-1}}.
 The key identity is x^2 = x (idempotence), so each variable appears at most once.
 
-PRECOMPUTE ONCE (the Carleman multiplication table).  The "multiplication" of
-two monomials m_i and m_j is just their Boolean union (OR of variable sets),
-giving another monomial m_k.  This M×M table U[i,j] = k is computed O(M^2)
-once, where M = 2^N.  After that:
+REPRESENT AND EVALUATE.  Each variable is idempotent (x^2 = x), so the
+monomial basis is the 2^N squarefree subsets of {0,...,N-1}, M = 2^N.
 
   - Representing any function as a coefficient vector c in GF(2)^M costs O(M^2)
     (Gaussian elimination over GF(2) to solve the Vandermonde system).
   - Evaluating f at any single point x  costs O(M) = O(2^N).
-  - Computing the FULL truth table of f costs O(M * 2^N) = O(4^N) — the same
-    as brute force.  BUT: the table U is shared, so the amortised cost of the
-    second, third, ... function is just the coefficient solve, not a new truth
-    table enumeration.
+  - Computing the FULL truth table of f costs O(M * 2^N) = O(4^N).
 
 SAT ENGINE FRAMING.  A function is SATISFIABLE iff its truth table has any 1;
 TAUTOLOGY iff all 1.  Both checks are O(1) in the lifted representation (just
@@ -32,8 +27,7 @@ dynamics via f(A)*v using Lanczos quadrature; here the lift is finite and exact.
 HONEST CAVEAT.  Basis and truth-table sizes are both 2^N, so this is
 exponential.  The O(1) "query" claim means: given a pre-solved coefficient
 vector, evaluating at ONE point is a single dot-product O(M).  Computing the
-entire truth table is still O(M^2) — the win is AMORTISED over many functions
-that share the same precomputed table.
+entire truth table is still O(M^2).
 
 Run:  cd /home/dima/resona && python3 examples/logic/boolean_carleman.py
 """
@@ -65,24 +59,7 @@ def monomial_eval_bool(mono, x_bits):
 
 
 # ---------------------------------------------------------------------------
-# 2.  MONOMIAL MULTIPLICATION TABLE  (O(M^2) precompute)
-# ---------------------------------------------------------------------------
-
-def build_multiplication_table(basis):
-    """U[i,j] = index of (basis[i] UNION basis[j]) in basis; -1 if outside basis."""
-    idx = {m: i for i, m in enumerate(basis)}
-    M = len(basis)
-    U = np.full((M, M), -1, dtype=np.int32)
-    for i, mi in enumerate(basis):
-        for j, mj in enumerate(basis):
-            prod = mi | mj
-            if prod in idx:
-                U[i, j] = idx[prod]
-    return U
-
-
-# ---------------------------------------------------------------------------
-# 3.  FUNCTION -> GF(2) POLYNOMIAL COEFFICIENTS  (via resona.lift.carleman_gf)
+# 2.  FUNCTION -> GF(2) POLYNOMIAL COEFFICIENTS  (via resona.lift.carleman_gf)
 # ---------------------------------------------------------------------------
 
 def truth_table_to_coeffs(fn_tuple, N):
@@ -135,12 +112,7 @@ if __name__ == "__main__":
     print("=" * 72)
     print(f"  N={N} Boolean variables  |  M = 2^N = {M} monomials  |  {2**N} inputs")
     print(f"  Key identity: x^2 = x  (idempotence)  ->  squarefree basis")
-    print()
-
-    t0 = time.perf_counter()
-    U = build_multiplication_table(basis)
-    t_table = time.perf_counter() - t0
-    print(f"  Precompute multiplication table ({M}x{M}={M*M} entries): {t_table*1e3:.2f} ms  [ONCE]")
+    print(f"  Basis: M = 2^N = {M} squarefree monomials")
     print()
 
     # Define test functions (two forms: *b for brute_force_tt; tuple for carleman_gf)
@@ -196,14 +168,14 @@ if __name__ == "__main__":
     print()
     print(f"  EXACTNESS: ALL {len(tests)} functions verified on ALL 2^{N}={2**N} inputs — 0 errors.")
     print()
-    print("  AMORTISED WIN: multiplication table built ONCE; each NEW function")
-    print("  only needs a GF(2) Vandermonde solve.  At N=10: table is 1024x1024")
-    print("  = 1M entries (tiny); solve is O(M^2)~1M operations; query O(M)~1K.")
+    print("  COST PROFILE: each function needs a GF(2) Vandermonde solve O(M^2),")
+    print("  then evaluation is O(M) per point.  At N=10: M=1024, solve is")
+    print("  O(M^2)~1M operations; single-point query O(M)~1K.")
     print()
     print(f"  Basis size growth (squarefree monomials = 2^N):")
     for n in range(1, 12):
         m = 2**n
-        print(f"    N={n:2d}: {m:6d} monomials, table {m}x{m}={m*m:10d} entries")
+        print(f"    N={n:2d}: {m:6d} monomials")
     print()
     print("  CAVEAT: 2^N basis is exponential; practical for N<=18 in dense form.")
     print("  For larger N, sparse polynomial representation is needed (not shown).")

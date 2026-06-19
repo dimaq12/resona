@@ -19,13 +19,9 @@ resona's ROLE.  The explicit formula IS a trace formula, and resona computes it
 as one: the primes define an atomic spectral measure mu = sum_p (log p / sqrt p)
 * delta(log p), wrapped as a resona.Spectral object, and the prime wave is its
 trace read  F(omega) = Tr cos(omega * A) = mu.trace(cos(omega * .)) — the same
-sum, evaluated through the library's measure API.  Separately, the prime-shift
-operator on the log-prime lattice: A * x[k] = sum_p w_p * x[k + log(p)] (a
-weighted shift operator) is probed by resona.of(matvec, N) via stochastic
-Lanczos quadrature, plus a vector-resolved read (resona.local_spectrum) showing
-the DC mode saturating the measure.  Finally resona.cost.level_spacing_ratio
-tests the famous GUE statistics of the zeros (Montgomery-Odlyzko) on both the
-true zeros and our detected peaks.
+sum, evaluated through the library's measure API.  Finally
+resona.cost.level_spacing_ratio tests the famous GUE statistics of the zeros
+(Montgomery-Odlyzko) on both the true zeros and our detected peaks.
 
 HONESTY CAVEAT.  The peak-finding matches zeta zeros well for the LOWER zeros
 (gamma < 60) where F(omega) has high signal-to-noise, and degrades for higher
@@ -69,10 +65,15 @@ def prime_measure(p_max=2000):
 def prime_wave(omega_vals, p_max=2000):
     """F(omega) = sum_p log(p)/sqrt(p) * cos(omega * log(p))
                 = Tr cos(omega*A)  for  A = diag(log p) with von Mangoldt weights.
-    Computed as a resona spectral-measure trace read — the explicit formula is
-    literally a trace formula (identical arithmetic to the direct sum)."""
+    The explicit formula is literally a trace formula; the resona measure's
+    atoms (lp) and weights (w) are read off mu, then the trace read
+    Tr cos(omega*A) = w · cos(omega ⊗ lp) is evaluated as one vectorised
+    matrix product over the whole omega grid (bit-identical to the per-omega
+    mu.trace(...) loop, just without the Python-level iteration)."""
     mu = prime_measure(p_max)
-    return np.array([mu.trace(lambda lam: np.cos(o * lam)) for o in omega_vals])
+    lp, w = mu.nodes, mu.weights
+    omega_vals = np.asarray(omega_vals)
+    return np.cos(np.outer(omega_vals, lp)) @ w
 
 def find_peaks(y, x, min_gap=1.0, rel_thresh=0.08):
     """Local maxima of |y| above threshold, separated by min_gap."""
@@ -91,22 +92,6 @@ def find_peaks(y, x, min_gap=1.0, rel_thresh=0.08):
             merged[-1] = pk
     return merged
 
-# ── resona: treat the prime-wave operator as a shift operator on log-prime grid ──
-# Build a small Hermitian operator whose eigenvalues are log(p) spacings.
-# resona probes its spectral density; the extreme() call brackets the range.
-
-def prime_shift_matvec(x, primes):
-    """Weighted circular shift: models sum of prime-frequency oscillators."""
-    lp = np.log(primes)
-    w  = np.log(primes) / np.sqrt(primes)
-    w  = w / w.sum()
-    N  = len(x)
-    out = np.zeros(N)
-    for wt, shift in zip(w, (lp / lp.max() * (N // 4)).astype(int)):
-        s = int(shift) % N
-        out += wt * np.roll(x, s)
-    return out + out[::-1]  # symmetrize → Hermitian
-
 if __name__ == "__main__":
     print("=" * 68)
     print("  RIEMANN PRIME WAVE — zeta zeros from prime number waves")
@@ -115,23 +100,6 @@ if __name__ == "__main__":
     P_MAX   = 2000
     primes  = sieve(P_MAX)
     print(f"  Primes <= {P_MAX}: {len(primes)}")
-
-    # ── resona: probe the prime-shift operator ────────────────────────────────
-    N_op = 256
-    mv   = lambda x: prime_shift_matvec(x, primes)
-    s    = resona.of(mv, N_op, k=64, probes=12)
-    lo, hi = s.extreme()
-    eff_r  = s.effective_rank()
-    print(f"  resona: spectral support [{lo:.4f}, {hi:.4f}], eff_rank={eff_r:.1f}")
-    print(f"  (eff_rank ~ 1 confirms strong concentration = low-rank prime structure)")
-
-    # Vector-resolved read: the local measure seen from the uniform (DC) vector.
-    loc_nodes, loc_w = resona.local_spectrum(mv, np.ones(N_op), k=64)
-    i_top = int(np.argmax(loc_w))
-    print(f"  local_spectrum from the uniform vector: {loc_w[i_top]/loc_w.sum():.1%}"
-          f" of the measure sits on lambda = {loc_nodes[i_top]:.4f}")
-    print(f"  (the DC mode saturates the shift operator — the same concentration,"
-          f" vector-resolved)")
 
     # ── compute F(omega) on a dense grid ─────────────────────────────────────
     omega = np.arange(10.0, 105.0, 0.02)
@@ -177,7 +145,6 @@ if __name__ == "__main__":
     print(f"    Matched (|d|<2.0)    : {matches} / {min(n_peaks, n_zeros)}")
     print(f"    Mean |delta| matched : {mean_d:.3f}")
     print(f"    Pearson r (zeros vs peaks, n={common}): {r:.4f}")
-    print(f"    resona eff_rank      : {eff_r:.2f}")
     print(f"    <r> spacing ratio (resona.cost): zeros = {r_zeros:.3f}, "
           f"detected peaks = {r_peaks:.3f}")
     print(f"    (GUE 0.600 / Poisson 0.386; n=30 is a small sample — suggestive,"

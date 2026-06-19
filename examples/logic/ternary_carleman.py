@@ -50,40 +50,25 @@ def build_basis(N, p=3):
     return list(iproduct(range(p), repeat=N))
 
 
-def monomial_eval(exp, x, p=3):
-    """Evaluate monomial x0^e0 * x1^e1 * ... at point x in GF(p)^N."""
-    val = 1
-    for xi, ei in zip(x, exp):
-        if ei > 0:
-            val = (val * pow(int(xi), ei, p)) % p
-    return val
-
-
 # ---------------------------------------------------------------------------
-# 2.  POLYNOMIAL COEFFICIENTS  (now via resona.lift.carleman_gf)
+# 2.  POLYNOMIAL COEFFICIENTS + EVALUATOR  (via resona.lift.carleman_gf)
 # ---------------------------------------------------------------------------
 
 def function_to_polynomial(fn_tuple, N, p=3):
     """Solve GF(p) Vandermonde for fn_tuple: {0..p-1}^N→{0..p-1} (accepts tuple).
-    Routes through resona.lift.carleman_gf — library primitive."""
-    coeffs, _ = resona_lift.carleman_gf(p, N, fn_tuple)
-    return coeffs
-
-
-def poly_eval(coeffs, basis, x, p=3):
-    """Evaluate polynomial sum_k c_k * phi_k(x) at x in GF(p)^N."""
-    return int(sum(c * monomial_eval(e, x, p) for c, e in zip(coeffs, basis)) % p)
+    Routes through resona.lift.carleman_gf — library primitive.
+    Returns (coeffs, evaluate) where evaluate(x_tuple) reproduces fn on all inputs
+    (the same exact closure used by the sibling boolean_carleman.py demo)."""
+    return resona_lift.carleman_gf(p, N, fn_tuple)
 
 
 # ---------------------------------------------------------------------------
 # 3.  DEMO
 # ---------------------------------------------------------------------------
 
-def verify_all(coeffs, basis, truth_table, inputs, p=3):
-    """Return (n_errors, max_error) over all inputs."""
-    errors = sum(1 for x, t in zip(inputs, truth_table)
-                 if poly_eval(coeffs, basis, x, p) != t)
-    return errors
+def verify_all(evaluate, truth_table, inputs):
+    """Return n_errors over all inputs, using the library evaluate() closure."""
+    return sum(1 for x, t in zip(inputs, truth_table) if evaluate(x) != t)
 
 
 if __name__ == "__main__":
@@ -120,11 +105,11 @@ if __name__ == "__main__":
         truth = np.array([fn(x) for x in inputs], dtype=np.int64)
 
         t0 = time.perf_counter()
-        coeffs = function_to_polynomial(fn, N, p)
+        coeffs, evaluate = function_to_polynomial(fn, N, p)
         t_pre += time.perf_counter() - t0
 
         t0 = time.perf_counter()
-        errs = verify_all(coeffs, basis, truth, inputs, p)
+        errs = verify_all(evaluate, truth, inputs)
         t_query_total += time.perf_counter() - t0
 
         n_terms = int(np.sum(coeffs != 0))

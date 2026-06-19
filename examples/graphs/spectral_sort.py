@@ -13,10 +13,13 @@ is precomputed you never need to re-sort — queries cost O(log n) forever.
 This matches the "precompute once, query cheaply" pattern: pay O(n log n)
 upfront, get O(log n) rank queries thereafter.
 
-resona's ROLE.  First the sanity check: resona.of on the uniform-spectrum
-"shift" operator (circulant permutation of the sorted data) reads its
-spectral effective_rank — for a perfect sorted array the circulant spectrum
-is maximally spread, so effective_rank ≈ N.  Then the deep dive: the same
+resona's ROLE.  First the sanity check: resona.of on the symmetrized
+circulant-shift operator reads its spectral effective_rank.  The
+eigenvalues are 2-2cos(2πk/n), so the density of states is the ARCSINE law
+ρ(λ) = 1/(π√(λ(4-λ))) — sharply EDGE-PEAKED, not flat.  Because the weight
+piles up at the band edges, the participation/effective rank plateaus near
+≈ 0.66 N (≈ 662 at N=1000), NOT N: a flat DOS would give ≈ N, but an
+arcsine DOS is the opposite of flat.  Then the deep dive: the same
 Spectral object sorts the SPECTRUM itself — s.levels(N) reconstructs all N
 eigenvalues from four numbers (Beta closure) against the exact closed form
 2-2cos(2πk/n), s.density is checked against the analytic arcsine DOS, and
@@ -26,7 +29,8 @@ the CDF rank query.
 RESULT.  Zero mismatches vs numpy.sort on all three distributions.  Rank
 queries via binary search match numpy.searchsorted exactly.  The Beta-closure
 spectrum tracks the exact eigenvalues to ~1% of the span, and spectral rank
-queries land within ~1% of N — all matrix-free.
+queries land within ~1% of N — all matrix-free.  The circulant effective_rank
+measures ≈ 0.66 N, the arcsine-DOS signature (edge-peaked), as expected.
 
 Run:  python3 examples/graphs/spectral_sort.py
 """
@@ -123,7 +127,7 @@ print(f"    numpy.searchsorted      : {ref_ms:7.3f} ms  (vectorised C)")
 print(f"    Rank mismatches         : {rank_err}  (must be 0)")
 
 # ---------------------------------------------------------------------------
-# resona spectral sanity — uniform circulant DOS should be flat, eff_rank ≈ N
+# resona spectral sanity — circulant DOS is ARCSINE (edge-peaked), eff_rank ≈ 0.66 N
 # ---------------------------------------------------------------------------
 
 print(f"\n  resona spectral fingerprint of the sorted Normal array (N=1000 subsample):")
@@ -140,8 +144,15 @@ matvec = lambda v: Ls @ v
 s = resona.of(matvec, n_sub, k=48, probes=12)
 eff_r = s.effective_rank()
 lo, hi = s.extreme()
-print(f"    Circulant Laplacian: support=[{lo:.3f}, {hi:.3f}], eff_rank={eff_r:.1f} (ideal ≈ {n_sub})")
-print(f"    (eff_rank/N = {eff_r/n_sub:.3f}; close to 1.0 signals flat / maximally-spread spectrum)")
+print(f"    Circulant Laplacian: support=[{lo:.3f}, {hi:.3f}], eff_rank={eff_r:.1f} (arcsine ≈ 0.66 N = {0.66*n_sub:.0f})")
+print(f"    (eff_rank/N = {eff_r/n_sub:.3f}; the DOS is ARCSINE = 1/(π√(λ(4-λ))),")
+print(f"     edge-peaked NOT flat, so weight piles at the band edges and rank < N)")
+# Level-spacing ratio of the exact eigenvalues: arcsine/circulant is integrable
+# (picket-fence spectrum), so <r> reads near the rigid/clustered end, not GUE.
+from resona import cost as rcost
+lam_exact_sanity = np.sort(2.0 - 2.0 * np.cos(2 * np.pi * np.arange(n_sub) / n_sub))
+r_spacing = rcost.level_spacing_ratio(lam_exact_sanity)
+print(f"    cost.level_spacing_ratio = {r_spacing:.3f}  (→ 1 = rigid/integrable picket-fence)")
 
 # ---------------------------------------------------------------------------
 # resona deep dive — the WHOLE spectrum from 4 numbers, and rank-as-trace
