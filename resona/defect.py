@@ -140,6 +140,54 @@ def normality(A, N=None, rmatvec=None, probes=48, groups=6, seed=0):
     return est, se
 
 
+def hard_points(family, ks, B, N=None, E=0.0, eta=0.08, probes=8, seed=0, cg_tol=1e-7):
+    """Locate the HARD points of a parametric family — avoided crossings /
+    exceptional points / transitions — MATRIX-FREE, with NO eigendecomposition.
+
+    The defect as a divining rod: the response susceptibility
+        Φ_η(k) = (η/π)² · Tr[ B R B R ],   R = ((H(k) − E)² + η²)⁻¹
+    SPIKES exactly where two eigenvalues collide (the gap → 0), so
+    argmax_k Φ_η  coincides with  argmin_k gap(k).  Computed by Hutchinson + CG
+    (matvecs of H(k) and B only) — it finds the hard point of the family WITHOUT
+    ever diagonalizing it.
+
+    family : callable k → H(k), each an ndarray OR a matvec callable (then pass N).
+    ks     : 1-D array of parameter values to scan.
+    B      : the observable / perturbation, ndarray or matvec callable.
+    E      : energy window centre (where the crossing is sought); eta: resolvent
+             smoothing (smaller → sharper peak, more CG work).
+    Returns (k_star, profile): the peak parameter and the Φ_η profile over ks.
+    """
+    from scipy.sparse.linalg import LinearOperator, cg
+    rng = np.random.default_rng(seed)
+    ks = np.atleast_1d(np.asarray(ks, float))
+    Bmv = B if callable(B) else (lambda v: B @ v)
+
+    def phi(Hk):
+        Hmv = Hk if callable(Hk) else (lambda v: Hk @ v)
+        n = N if callable(Hk) else Hk.shape[0]
+        if n is None:
+            raise ValueError("hard_points(family→matvec, ...) needs N")
+
+        def AzA(v):                                     # ((H−E)² + η²) v
+            w = np.asarray(Hmv(v)) - E * v
+            return np.asarray(Hmv(w)) - E * w + eta ** 2 * v
+
+        Aop = LinearOperator((n, n), matvec=AzA)
+
+        def R(z):
+            y, _ = cg(Aop, z, rtol=cg_tol, maxiter=2000); return y
+
+        acc = 0.0
+        for _ in range(probes):
+            x = rng.choice([-1.0, 1.0], size=n)         # Rademacher probe
+            acc += float(x @ Bmv(R(Bmv(R(x)))))         # xᵀ B R B R x
+        return (eta / np.pi) ** 2 * acc / probes
+
+    profile = np.array([phi(family(float(k))) for k in ks])
+    return float(ks[int(np.argmax(profile))]), profile
+
+
 def pseudospectrum_radius(A, eps, z0=0.0, N=None, rmatvec=None, direction=1.0,
                           r_max=None, k=96, iters=60):
     """The local ε-pseudospectrum radius at z0: the largest r along `direction`

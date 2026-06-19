@@ -264,6 +264,23 @@ def test_normality_zero_for_normal_and_matfree_structured():
     assert abs(ev - dense) / dense < 1e-9 and se2 == 0.0
 
 
+def test_hard_points_finds_avoided_crossing():
+    """Φ_η divining rod: argmax_k Φ_η = the avoided crossing (k=0), matrix-free, no eig."""
+    N = 200; delta = 0.04
+    bg = np.diag(np.concatenate([[0, 0], rng.uniform(0.5, 3, N - 2) * rng.choice([-1, 1], N - 2)]))
+    off = np.zeros((N, N)); off[0, 1] = off[1, 0] = delta
+
+    def H_of_k(k):
+        M = bg.copy().astype(float); M[0, 0] = k; M[1, 1] = -k; M += off
+        return (M + M.T) / 2
+
+    B = np.zeros((N, N)); B[0, 1] = B[1, 0] = 1.0
+    ks = np.linspace(-0.3, 0.3, 13)
+    k_star, prof = resona.defect.hard_points(H_of_k, ks, B, E=0.0, eta=0.06, probes=8)
+    assert abs(k_star) < 1e-9                       # the crossing is at k=0 (min gap = 2δ)
+    assert prof.argmax() == len(ks) // 2            # peak at the centre
+
+
 def test_normality_dense_robust_all_seeds():
     """Rademacher + median-of-means: even a DENSE random op is <3% on every seed
     (regression — Gaussian seed=0 here used to read 49.8% off)."""
