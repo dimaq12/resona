@@ -3,6 +3,33 @@
 All notable changes to resona.  The discipline throughout: every number below
 is printed by a test or a gallery stand, not asserted by hand.
 
+## [3.0.1] — 2026-06-19
+Example-revision epic — bring every gallery stand up to the v3 spirit (use the
+primitives, not hand-rolled numpy), give the new 3.0 reads live showcases, and a
+bugfix to the 3.0.0 flagship.  Library source UNCHANGED (examples only); 126 tests
+green; all 56 stands rc=0; numbers below printed by their stands.
+
+- **BUGFIX** — `examples/spectral_phenomena/matrix_free_kernel.py` (the 3.0.0
+  flagship) lacked the `sys.path` bootstrap, so it ran only with PYTHONPATH set and
+  failed in the gallery / for any user running it directly.  Fixed; rc=0 standalone.
+- **Use the primitive** — `edge_weight_recovery` & `inverse_graph_design`: the
+  hand-rolled Gauss-Newton normal equations → `wkernel.design` (SVD form).  Spectral
+  error 2.59e-5 → **5.13e-16** (edge), 1.26e-2 → 1.13e-2 (design), equal wall-time.
+  `phase_transition`: hand-rolled Φ_η → `defect.hard_points` (bit-identical, cleaner
+  monotone profile, CG flag now checked).
+- **Live v3 showcases (additive)** — `nonnormal_convergence` & `lorenz_control` +
+  `defect.normality`; `integrability_detector`, `tracy_widom_edge`, `zeta_ascent` +
+  `cost.rmt_class` (zeta: GUE in 17/20 windows); `shor_wall` + `cost.is_extractable`;
+  `dequantize` + `effective_rank` (Φ₁=3.28); `kepler_spectrum` + robust Hutchinson trace.
+- **Speed, metrics identical** — `killer_tasks` truth eigvalsh→eigsh **548×**;
+  `free_convolution_flow`, `grand_tour`, `spike_detection`; `hubbard_mott` 177→81 s.
+- **Cleanup** — `ternary`/`boolean_carleman` use `lift.carleman_gf`'s closure (−43
+  lines dead code); `impossible_structures` fully matrix-free; `spectral_sort` &
+  `riemann_prime_wave` narrative corrections.
+- **New stands** — `rmt_universality` (all four Dyson classes via `cost.rmt_class`)
+  and `spectrum_that_lies` (`defect.normality`/`sigma_min`/`pseudospectrum`/`cloud`
+  on a strongly non-normal operator).
+
 ## [3.0.0] — 2026-06-19
 Matrix-free epic — kill resona's last dense O(N³), add three matrix-free spectral
 reads.  All additions are OPT-IN (the old defaults are bit-for-bit unchanged: the
