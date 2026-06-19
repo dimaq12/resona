@@ -84,6 +84,22 @@ tr_A2_exact = float((omega2**2).sum())     # exact Tr(A^2) = sum omega_i^4
 tr_A_slq,  tr_A_err  = s.moment(1, with_err=True)   # SLQ estimate ± stderr
 tr_A2_slq, tr_A2_err = s.moment(2, with_err=True)
 
+# Rademacher–Hutchinson trace (resona v3's robust moment path): Tr(A)=E[zᵀAz],
+# Tr(A²)=E[‖Az‖²] with z a ±1 sign vector.  On a DIAGONAL operator z_i²=1, so a
+# single probe already gives Σ A_ii EXACTLY — this is the robust read beta_from
+# uses (robust=True) when the Spectral carries its matvec, here shown bare so the
+# exactness is visible.  Contrast the ~8% SLQ-quadrature noise above.
+_rh_rng = np.random.default_rng(0)
+_RH_PROBES = 64
+_rh_tr1, _rh_tr2 = [], []
+for _ in range(_RH_PROBES):
+    z  = _rh_rng.integers(0, 2, N) * 2.0 - 1.0     # Rademacher ±1
+    Az = matvec(z)
+    _rh_tr1.append(float(z @ Az))                  # zᵀAz   → Tr(A)
+    _rh_tr2.append(float(Az @ Az))                 # ‖Az‖²  → Tr(A²)
+tr_A_rh,  tr_A_rh_err  = float(np.mean(_rh_tr1)), float(np.std(_rh_tr1) / np.sqrt(_RH_PROBES))
+tr_A2_rh, tr_A2_rh_err = float(np.mean(_rh_tr2)), float(np.std(_rh_tr2) / np.sqrt(_RH_PROBES))
+
 # ── Kepler's 3rd law: recover exponent from log-log regression ─────────────────
 # log(omega) = alpha * log(a) + const  →  expect alpha = -3/2
 log_a   = np.log(A_AU)
@@ -147,11 +163,17 @@ if __name__ == "__main__":
     print(f"    Tr(A)   = sum omega_i^2 = {tr_A_exact:.4f}   [EXACT]")
     print(f"      resona SLQ estimate   = {tr_A_slq:.4f} +/- {tr_A_err:.4f}"
           f"  ({'covers' if abs(tr_A_slq - tr_A_exact) <= tr_A_err else 'MISSES'} exact)")
+    print(f"      Rademacher-Hutchinson = {tr_A_rh:.4f} +/- {tr_A_rh_err:.4f}"
+          f"  (|err| = {abs(tr_A_rh - tr_A_exact):.2e}, EXACT on a diagonal op)")
     print(f"    Tr(A^2) = sum omega_i^4 = {tr_A2_exact:.4f}   [EXACT]")
     print(f"      resona SLQ estimate   = {tr_A2_slq:.4f} +/- {tr_A2_err:.4f}"
           f"  ({'covers' if abs(tr_A2_slq - tr_A2_exact) <= tr_A2_err else 'MISSES'} exact)")
+    print(f"      Rademacher-Hutchinson = {tr_A2_rh:.4f} +/- {tr_A2_rh_err:.4f}"
+          f"  (|err| = {abs(tr_A2_rh - tr_A2_exact):.2e}, EXACT on a diagonal op)")
     print(f"    (SLQ with {20} probes is a noisy read of an 8-atom measure; the")
-    print(f"     error bar is honest and brackets the exact trace.)")
+    print(f"     error bar is honest and brackets the exact trace.  The robust")
+    print(f"     Rademacher-Hutchinson trace — beta_from(robust=True)'s path — nails")
+    print(f"     it exactly here: on a diagonal op z_i^2=1 so z^T A z = sum A_ii.)")
     print(f"    eff_rank                = {eff_r:.4f}")
 
     print(f"\n  W-KERNEL  dlambda_i/d(GM) = a_i^(-3)  [Hellmann-Feynman]:")

@@ -130,6 +130,32 @@ if __name__ == "__main__":
     print(f"      agreement to TWO digits, well inside one error bar.  (Odlyzko used")
     print(f"      ~10⁸ zeros to push this to many digits; one table here ≠ four digits.)")
 
+    # ── DIAL 1b: rmt_class — resolve the CLASS (GUE vs GOE), not just ⟨r⟩ ────
+    # ⟨r⟩ ≈ 0.60 says "chaotic, not Poisson" but cannot tell GUE from GOE (both
+    # sit near 0.53–0.60).  R4 (rigidity meter) is ordered GOE(+0.05) > GUE(−0.05),
+    # so it names the Dyson class.  A single window is noisy (~2σ GOE↔GUE), so we
+    # AVERAGE R4 over 20 disjoint windows of 2000 absolute zeros each (Riemann–von
+    # Mangoldt unfolding), as the meter's own honest-caveat prescribes.
+    import warnings
+    W_RMT, N_WIN = 2000, 20
+    r4s, classes = [], []
+    for i in range(N_WIN):
+        seg = z1[i * W_RMT:(i + 1) * W_RMT]
+        if len(seg) < W_RMT:
+            break
+        u = nbar(np.sort(seg))                         # unfold (absolute table)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", np.exceptions.RankWarning)
+            cls, r4 = resona.cost.rmt_class(u)
+        r4s.append(r4); classes.append(cls)
+    r4s = np.array(r4s)
+    gue_frac = sum(c == "GUE" for c in classes)
+    print(f"\n  DIAL 1b — rmt_class R4 over {len(r4s)} windows of {W_RMT} absolute zeros each:")
+    print(f"    mean R4 = {r4s.mean():+.4f} ± {r4s.std(ddof=1) / np.sqrt(len(r4s)):.4f}"
+          f"   (GOE ≈ +0.05, GUE ≈ −0.05)")
+    print(f"    GUE in {gue_frac}/{len(r4s)} windows  →  the class resolves as GUE, the")
+    print(f"    Montgomery–Odlyzko answer ⟨r⟩ alone (0.53–0.60 for both GOE & GUE) cannot give.")
+
     # ── DIAL 2: Jacobi β-rigidity vs height, shared controls ────────────────
     print(f"\n  DIAL 2 — building {N_GUE} GUE controls (n={3 * M} dense eigvalsh) …",
           flush=True)

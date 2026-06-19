@@ -75,11 +75,28 @@ if __name__ == "__main__":
     print("\n  (B) the Φ₁ dial on a^x mod N (large order) vs a structured sequence:")
     N = 100003 * 100019                                            # ~10^10, large order
     k = 60
-    phi_shor = resona.cost.lift_rank([pow(3, x, N) for x in range(130)], k)
-    phi_struct = resona.cost.lift_rank([np.sin(2 * np.pi * x / 7) for x in range(130)], k)
+    seq_shor = [pow(3, x, N) for x in range(130)]
+    seq_struct = [np.sin(2 * np.pi * x / 7) for x in range(130)]
+    phi_shor = resona.cost.lift_rank(seq_shor, k)
+    phi_struct = resona.cost.lift_rank(seq_struct, k)
     print(f"      {'sequence':>26} {('Φ₁ (eff. rank, max=%d)' % k):>24}")
     print(f"      {'a^x mod N (Shor target)':>26} {phi_shor:>20.1f}   ← ~10× higher: no handle")
     print(f"      {'periodic (period 7)':>26} {phi_struct:>20.1f}   ← low: we harvest it")
+
+    print("\n  (C) is_extractable — the removable-vs-genuine dichotomy across windows:")
+    print("      (does the lift-rank SATURATE — removable, a finite chart closes — or")
+    print("       GROW with the window — a genuine wall no coordinate change removes?)")
+    windows = (20, 40, 80, 120)
+    # longer trajectories so the largest window keeps plenty of Hankel rows — the
+    # rank curve then reads the asymptotic growth, not a short-signal truncation.
+    long_shor = [pow(3, x, N) for x in range(400)]
+    long_struct = [np.sin(2 * np.pi * x / 7) for x in range(400)]
+    ex_shor, ranks_shor = resona.cost.is_extractable(long_shor, windows=windows)
+    ex_struct, ranks_struct = resona.cost.is_extractable(long_struct, windows=windows)
+    fmt = lambda rs: "  ".join(f"{r:5.1f}" for r in rs)
+    print(f"      {'window →':>26}   {'  '.join(f'{w:>5d}' for w in windows)}   extractable?")
+    print(f"      {'a^x mod N (Shor target)':>26}   {fmt(ranks_shor)}   {ex_shor}   ← GROWS: chart never closes")
+    print(f"      {'periodic (period 7)':>26}   {fmt(ranks_struct)}   {ex_struct}    ← SATURATES: finite lift")
 
     print("\n" + "=" * 70)
     print("VERDICT — honest")

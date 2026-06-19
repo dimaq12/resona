@@ -16,6 +16,8 @@ RESONA's role:  kappa_w(modes=k) / track(modes=k) — OPT-IN; modes='all' is the
        defect.normality (departure from normality), defect.hard_points
        (avoided-crossing / EP locator, no eig), cost.rmt_class (RMT class).
 """
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 import numpy as np
 import scipy.sparse as sp
 import time
