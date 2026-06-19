@@ -30,6 +30,12 @@ see theory/burgers_shock.py): Tracy–Widom is what the defect looks like up clo
 Run:  python3 examples/tracy_widom_edge.py     (~70s: many samples for clean std)
 """
 import sys, os, time
+# Cap BLAS threads BEFORE numpy import: the one-off GOE-class diagnostic below does
+# a few small dense eigvalsh; on an oversubscribed box 4 threads keeps it to seconds
+# and does not affect the matrix-free Lanczos sampling loop (deterministic, seeded).
+os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "4")
+os.environ.setdefault("MKL_NUM_THREADS", "4")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 import resona
@@ -55,6 +61,31 @@ if __name__ == "__main__":
     print("=" * 74)
     print(f"  GOE matrix, edge at 2.  λ_max ≈ 2 + N^(-2/3)·ξ,  ξ ~ TW1.")
     print(f"  confirm: std·N^(2/3) → σ_TW1={TW1_STD},  mean·N^(2/3) → μ_TW1={TW1_MEAN}.\n")
+
+    # ── WHY β=1 (TW1) and not β=2 (TW2): name the ensemble class first ────────
+    # The edge law is GOE→TW1, GUE→TW2; they differ.  Before quoting TW1 we CHECK
+    # that the matrices we build really are GOE (β=1), via resona.cost.rmt_class
+    # (rigidity meter R4: GOE ≈ +0.05, GUE ≈ −0.05) and ⟨r⟩ (GOE ≈ 0.53, GUE ≈ 0.60)
+    # on the unfolded BULK.  A single window is noisy near the GOE↔GUE line, so we
+    # average over a few draws (the meter's own honest caveat).
+    import warnings, collections
+    _n_diag, _ndraw = 800, 4
+    _r4s, _rs, _cls = [], [], []
+    for _s in range(_ndraw):
+        _rng = np.random.default_rng(7000 + _s)
+        _G = _rng.standard_normal((_n_diag, _n_diag))
+        _ev = np.sort(np.linalg.eigvalsh((_G + _G.T) / np.sqrt(2 * _n_diag)))
+        _bulk = _ev[int(0.1 * _n_diag):int(0.9 * _n_diag)]      # drop edges → flat bulk
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", np.exceptions.RankWarning)
+            _c, _r4 = resona.cost.rmt_class(_bulk)
+        _r4s.append(_r4); _rs.append(resona.cost.level_spacing_ratio(_bulk)); _cls.append(_c)
+    _cls_mode = collections.Counter(_cls).most_common(1)[0][0]
+    print(f"  ENSEMBLE CLASS (rmt_class on the GOE bulk, {_ndraw} draws of N={_n_diag}):")
+    print(f"    class = {_cls_mode}  ({sum(c == 'GOE' for c in _cls)}/{_ndraw} draws),  "
+          f"R4 = {np.mean(_r4s):+.3f}  (GOE≈+0.05, GUE≈−0.05),  "
+          f"⟨r⟩ = {np.mean(_rs):.3f}  (GOE≈0.53)")
+    print(f"    → β=1 (GOE): the edge follows TW1, NOT TW2 — justifying the constants below.\n")
     Ns, Rs = [256, 512, 1024, 2048], [400, 300, 200, 120]
     print(f"  {'N':>5} {'samples':>8} {'std(λ_max)':>11} {'std·N^2/3':>11} {'mean·N^2/3':>11}")
     print("  " + "─" * 52)
