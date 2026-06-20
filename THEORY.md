@@ -33,6 +33,18 @@ conjugates** through `φ(t)=Tr e^{-itA}`, giving the uncertainty
 Heisenberg. The transform between them is **Lanczos / stochastic Lanczos
 quadrature** — exactly what `resona.of` computes.
 
+**The W⊥Φ watershed.** `W` and `Φ` sit on opposite sides of a cost watershed:
+`Φ` (moments) is **matrix-free** — `Tr(A^p B)` needs only the matvec — while
+`W` (the Hellmann–Feynman density `∂λ_i/∂k_j = v_iᵀB_j v_i`) needs the
+**eigenvectors**, classically `O(N³)`. Moments compose and are blind to λ;
+`W` resolves λ but does not compose. The watershed is real, but it is not the
+whole spectrum: for a **selected** set of modes the W-side is matrix-free too —
+`wkernel.kappa_w(modes=k)` / `track(modes=k)` run `eigsh` on the tracked block,
+giving `∂λ` and its curvature `κ_W` for the bottom/top-k modes in `O(N·k)`
+(measured ~294× over the dense eigh at N=4000, rel.err `1e-10`). So the dense
+`O(N³)` survives only when you genuinely want **all N** eigenvectors; the
+conjugate pair is matrix-free on both sides for any fixed mode budget.
+
 ## 3. Free probability (the algebra underneath)
 
 The response algebra **is** Voiculescu free probability.
@@ -109,7 +121,33 @@ including the classical↔quantum boundary. Demonstrated: low-rank quantum speed
 dequantizes by sampling (dimension-independent); `aˣ mod N` reads as structureless
 (`Φ₁` high) — Shor's wall, marked honestly by our own dial.
 
-## 6. Verification scripts ([`theory/`](theory/))
+## 6. The non-Hermitian extension (by hermitization)
+
+A non-Hermitian `A` has no spectral measure on the line; the right object is the
+**Brown measure** `μ_A` on the complex plane (Haagerup–Larsen). It is matrix-free
+in the same currency as the rest of the library, via **hermitization**: the
+log-potential
+`S(z) = (1/2N) Tr log((A−z)*(A−z)) = (1/N) Tr log|A−z|` is one **SLQ log-det**
+per grid point — `resona.of(matvec, N).trace(log)` on the Hermitian dilation —
+and `μ_A = (1/2π) Δ S` (Laplacian on the grid). The free additive sum of two
+Brown measures is the per-z Hermitian free convolution of the hermitizations
+(`brown_boxplus`). So the plane-valued spectrum costs one matrix-free log-det
+per grid point — no `eig`, no SVD (the exact-SVD path is the `O(N³)` ground
+truth only). `S` is log-singular on `supp μ_A`, so the stochastic estimate is
+read as a smoothed density, not pointwise.
+
+The conjugate-pair `W` also extends. The Hellmann–Feynman derivative
+`∂λ_i = v_iᵀ B v_i` is Hermitian-only (orthonormal eigenvectors); for a
+non-Hermitian `A` the correct generalization is **biorthogonal perturbation
+theory** — `∂λ_i = (u_i* B v_i)/(u_i* v_i)` with `u_i, v_i` the left/right
+eigenvectors (Arnoldi / shift-invert for the targeted complex λ).
+`resona.cloud_flow` computes exactly this, reducing to `wkernel` when `A` is
+Hermitian (`u_i = v_i`, denominator `=1`). The denominator `u_i* v_i → 0`
+precisely at an **exceptional point** — where left and right eigenvectors
+become parallel — so the biorthogonal `W` *is* the EP locator: the divergence
+is the read, not a failure.
+
+## 7. Verification scripts ([`theory/`](theory/))
 
 | script | claim verified |
 |--------|----------------|
@@ -130,6 +168,8 @@ cd theory && python3 free_prob_bridge.py   # etc.
 ---
 
 *The classical theorems are the field's (Voiculescu, Speicher, Biane; Golub–
-Meurant, Ubaru–Saad; Tang). The cross-field synthesis — the response measure as a
-conjugate pair, the defect=shock=edge identity, the Extraction Law, and Φ₁ as the
-dial — is the research contribution, offered openly. See `NOVELTY.md`.*
+Meurant, Ubaru–Saad; Tang; Haagerup–Larsen for the Brown measure; biorthogonal /
+non-Hermitian perturbation theory for `∂λ`). The cross-field synthesis — the
+response measure as a conjugate pair, the defect=shock=edge identity, the
+Extraction Law, and Φ₁ as the dial — is the research contribution, offered openly.
+See `NOVELTY.md`.*

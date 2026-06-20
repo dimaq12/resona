@@ -82,7 +82,15 @@ each entry verified in `tests/` and `examples/` against dense ground truth:
 | `defect.generator_read` | the solver's defect IS the Koopman generator (BE: (t²/4n)·A²e^{−tA}u₀) | O(n⁻²) exact, incl. defective Grcar κ=∞ |
 | `defect.defect_barycentres` | per-band barycentre of the defect power (BDS) — blind-zone-free | 35/35 PDEs; stable at 5% noise where the ratio dies at 1e-5 |
 | `wkernel.track` | the spectral-flow line integral, crossing-safe by eigenvector continuation | 8.9e-15 vs 3.3 (sorted) at a crossing |
+| `wkernel.kappa_w(modes=k)` / `track(modes=k)` | matrix-free SELECTED-mode flow (`eigsh` bottom/top-k) — closes the last O(N³) | 820× / 690× vs dense at N=4000; gapped rel.err 1.8e-5 |
 | `subordination.contraction` | \|T′\| of the Pastur fixed point — the edge-of-chaos read | →0.9998 at the band edge, iters 90→12k |
+| `defect.normality` | global departure-from-normality ‖[A,A*]‖²_F (Rademacher–Hutchinson) | 0 for normal; 1.25e8 triangular, 0.3% off dense |
+| `defect.hard_points` | matrix-free avoided-crossing / EP locator (Φ_η peak = gap min), no eig | argmax Φ_η = argmin gap, Hutchinson+CG |
+| `cost.rmt_class` | the Dyson universality class from R4 rigidity (companion to ⟨r⟩) | Poisson +0.21 > GOE +0.03 > GUE −0.06, ordered |
+| `beta.beta_from(robust=True)` | the whole band from two trace numbers (μ₁, μ₂ + edges) | < 2% of span; N=10⁷ in ~90 s |
+| `brown.brown_measure` | the BROWN MEASURE: stable eigenvalue density in the plane via hermitization | circular law 0.322 vs 1/π=0.318, mass 1.01 |
+| `brown.brown_boxplus` | the Brown measure of a *-free sum A+B (non-Hermitian ⊞) in the plane | Belinschi–Bercovici subordination, no matrix |
+| `cloud_flow.cloud_wkernel` / `exceptional_point` | non-Hermitian (biorthogonal) ∂λ=(u*Bv)/(u*v) + EP locator | EP to 2e-6; blow-up matches 1/(2√k) to <1e-4 |
 
 🔧 **Have a task right now?** The **[cookbook](https://github.com/dimaq12/resona/blob/main/docs/README.md)**: find your task
 in the "I want to…" table, copy the recipe.
@@ -96,6 +104,10 @@ scripts, every metric printed by the script itself:
 |------|------|--------|
 | **GP log-determinant** | `log\|K\|` for hyperparameter learning at scale | 0.84% rel.err, no Cholesky |
 | **Loss-Hessian spectrum** | sharpness & curvature from HVPs, no Hessian formed | λ_max 0.00%, Tr 0.30% |
+| **Loss-landscape curvature** | effective curvature dimension + flat/sharp split from HVPs | eff-rank 15.8 vs 15.1, λ_max exact, 587/12 flat/sharp |
+| **Effective degrees of freedom** | model complexity `Tr K(K+λI)⁻¹` matrix-free, sweep λ | DoF rel.err 0.9–1.6%, N=50k kernel |
+| **Eigenvalues in the plane** | Brown measure of a non-normal A (the stable 2-D law) | circular law density ≈ 1/π, mass 1.01 |
+| **Exceptional points** | where two eigenvalues coalesce, biorthogonal ∂λ→∞ | EP located to 2e-6, blow-up = 1/(2√k) |
 | **Spectrum of A+B** | composed, matrix-free (Horn's problem in practice) | extreme eig to 1e-9 |
 | **Deep-net trainability** | `cond(W_L…W_1)` predicted from init, no fwd/bwd | Gaussian explodes, orthogonal ≈1 |
 | **Effective rank Φ₁** | the cost dial: structured/cheap vs full/frontier | 14 vs 466 |
@@ -134,6 +146,11 @@ Three verbs on one object, everything else reads off the same hub:
   APPLY      resona.apply(matvec, f, v)  →  f(A)·v   (solve / evolve / filter)
   INVERSE    resona.from_measure / from_eigenbasis   (measure → operator: SYNTHESIS)
   PRECISION  resona.solve.rayleigh_polish / catastrophe_solve  (digits, only where needed)
+
+  NON-HERMITIAN corner (same five verbs, the plane instead of the line):
+  brown.brown_measure / brown_boxplus      eigenvalue DENSITY in C, *-free sum
+  cloud_flow ∂λ=(u*Bv)/(u*v) / exceptional_point     biorthogonal MOVE + EP
+  defect.normality ‖[A,A*]‖²_F             is the spectrum the whole story?
 ```
 
 When the matvec also maps blocks (`A @ X`), probing rides one BLAS-3
@@ -141,11 +158,20 @@ block-Lanczos automatically — 2–4× faster, bit-compatible (verified, then
 enabled; never assumed).
 
 The deeper machinery is in plain modules — `wkernel` (spectral Jacobian
-∂λ/∂k + design), `lift` (R/S transforms, Carleman, conserved charges), `free`
-(cumulants, freeness), `subordination` (Pastur), `flow` (Burgers), `beta`
-(max-entropy closure), `defect` (Richardson + pseudospectra), `cost`
-(Extraction Law, ⟨r⟩), `solve` (precision on the defect) — each documented in
+∂λ/∂k + design + matrix-free `modes=k` selected flow), `lift` (R/S transforms,
+Carleman, conserved charges), `free` (cumulants, freeness), `subordination`
+(Pastur), `flow` (Burgers), `beta` (max-entropy closure, `beta_from`), `defect`
+(Richardson + pseudospectra + `normality` + `hard_points`), `cost` (Extraction
+Law, ⟨r⟩, `rmt_class`), `solve` (precision on the defect) — each documented in
 its docstring, each verified in `tests/`.
+
+**Both corners are closed.** All five verbs — read / move / trust / compose /
+synthesize — now run matrix-free for **non-Hermitian** operators too: `brown`
+(the Brown measure — eigenvalue density in the plane, `brown_boxplus` for the
+*-free sum) and `cloud_flow` (the biorthogonal ∂λ and the exceptional-point
+locator) complete the self-adjoint line into the non-normal plane. With
+`wkernel.kappa_w(modes=k)` the last O(N³) on the Hermitian side is gone:
+selected-mode spectral flow is `eigsh`-cheap (820× over dense at N=4000).
 
 ## Honesty
 

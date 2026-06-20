@@ -21,6 +21,12 @@ claim none of the following — they are the field's, and we use them gratefully
   (free cumulants, non-crossing partitions); **subordination** (Biane).
 - Standard results: condition number / Krylov deflation, the Marchenko–Pastur
   law, Tracy–Widom edge, Tang-style dequantization of low-rank problems.
+- **The non-Hermitian objects themselves** — the **Brown measure** and its
+  **hermitization** (Haagerup–Larsen; Girko's `H(z)=[[0,A−z],[(A−z)*,0]]`),
+  **biorthogonal perturbation theory** (left/right eigenvectors, the
+  `(u*Bv)/(u*v)` eigenvalue derivative, **exceptional points**), and the
+  **random-matrix universality classes** (Wigner–Dyson β=1,2,4; the level-spacing
+  ratio). We use these; we did not discover them.
 
 If you need a specific sub-algorithm, it predates this package.
 
@@ -57,10 +63,26 @@ sub-algorithms:
    computational capacity, and the classical/quantum boundary — through one
    measurable quantity (the response and its effective rank).
 
+5. **A closed verb set over the same interface — including the non-Hermitian
+   corner.** The single primitive resolves into five matrix-free verbs on one
+   object: *build* (probe / synthesize), *read* (density, moments, trace,
+   effective rank), *move* (the spectral Jacobian `∂λ/∂k` and its flow), *trust*
+   (the defect, `σ_min`, pseudospectrum, departure-from-normality), and *compose*
+   (free convolution). The closure claim is that **all five run from matvecs
+   alone, for both self-adjoint AND non-self-adjoint operators** — the latter by
+   reading the Brown measure as a matrix-free log-det object (hermitization →
+   SLQ `Tr log`) and the eigenvalue motion by biorthogonal left/right reads, so
+   the *plane* spectrum and its sensitivity join the same matrix-free calculus.
+   The last dense `O(N³)` of the self-adjoint side (the eigenvector / `W` half of
+   the conjugate pair) is removed for selected modes by a shift-invert read.
+
 **Reserved:** the framing and API design of the single-primitive interface; the
-formulation of the Extraction Law and its removable/genuine criterion; the
-`Φ₁`-as-dial proposal; and the unifying synthesis above. These are research
-contributions, offered openly under MIT, with attribution requested.
+five-verb closure and its extension to the non-Hermitian corner (the *realization*
+and *unification* — not the Brown measure or biorthogonal theory themselves, which
+are credited above); the formulation of the Extraction Law and its
+removable/genuine criterion; the `Φ₁`-as-dial proposal; and the unifying synthesis
+above. These are research contributions, offered openly under MIT, with
+attribution requested.
 
 ## The mathematical ideas we read as ours
 
@@ -108,7 +130,10 @@ is one measure `μ_B = Σ_i (v_iᵀ B v_i) δ(λ_i)` at two resolutions — its 
 `φ(t)=Tr e^{-itA}`, giving `(λ-resolution) × (moment order) ≳ 1`.
 *Ours:* the framing of W and Φ as one measure at two resolutions, bridged by
 Lanczos quadrature, with a Heisenberg-type bound. *Classical:* the identity itself
-(elementary); SLQ. *Status:* framing.
+(elementary); SLQ. *Status:* framing — and the W (density) side, long the only
+remaining `O(N³)`, is now read matrix-free for a SELECTED block of modes (a
+shift-invert read of `κ_W` / the spectral flow), closing the conjugate pair on
+both sides for the modes one actually tracks.
 
 **5. "Any shock is a sum of linearities" = the R-transform = the Cole–Hopf of free
 probability.** The R-transform linearizes the shock-forming free-convolution flow
@@ -123,6 +148,21 @@ solving is **extraction, not creation**; an operator is a program, and a generic
 medium already computes (the response / reservoir). The defect is the
 side-channel to collect.
 *Status:* organizing principle / worldview, not a theorem.
+
+**7. The matrix-free spectral calculus extends past self-adjointness.** The same
+*probe → read → move → trust → compose* interface is carried to NON-normal
+operators by hermitization: the eigenvalue distribution in the *plane* (the Brown
+measure) becomes a matrix-free object — `S(z)=(1/2N)Tr log((A−z)*(A−z))` read by
+SLQ, `μ=(1/2π)ΔS` — and the eigenvalue *motion* and *exceptional points* are read
+from biorthogonal left/right pairs (`∂λ=(u*Bv)/(u*v)`, with `|u*v|→0` locating an
+EP). *Ours:* the realization — Brown measure as an SLQ log-det field, the EP
+locator as a phase-rigidity read, and their unification under one matrix-free
+interface, so the *closed verb set holds in the plane too*. *Classical:* the Brown
+measure and hermitization (Haagerup–Larsen, Girko), biorthogonal perturbation
+theory, and free probability (credited above). *Status:* realized and verified
+against dense ground truth (the circular law to the `1/π` density; EP located;
+free-sum Brown measure covering the `eig(A+B)` cloud) — engineering + framing, not
+new mathematics.
 
 ## Honest status
 

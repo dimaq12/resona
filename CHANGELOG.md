@@ -3,6 +3,23 @@
 All notable changes to resona.  The discipline throughout: every number below
 is printed by a test or a gallery stand, not asserted by hand.
 
+## [3.1.2] — 2026-06-20
+Docs catch up to 3.0/3.1, plus two data-science stands.  No library API change.
+- **New `COOKBOOK.md`** — 13 task→primitive→snippet recipes, organized by the five
+  verbs (read / move / trust / compose) across both corners, every number quoted
+  from a run: Hessian spectrum, effective DoF, Brown measure, exceptional-point
+  locator, matrix-free κ_W, RMT class, departure-from-normality, certified log-det,
+  spectrum-from-two-moments.
+- **New stands** `examples/data/hessian_spectrum.py` (loss-landscape curvature:
+  effective_rank 15.8 vs dense 15.1, flat/sharp count 587/12, scale to d=20k) and
+  `examples/data/effective_dof.py` (effective degrees of freedom, rel-err 0.9–1.6%,
+  scale to n=50k).  Both verified against dense ground truth.
+- **Docs** — README feature table, COMPLEXITY, API_REVIEW (non-Hermitian corner now
+  CLOSED), THEORY (W⊥Φ watershed + hermitization), examples index, and NOVELTY
+  (matrix-free non-Hermitian closure recorded with a calibrated our-vs-classical
+  boundary; Brown measure / biorthogonal theory / RMT classes credited as classical).
+  LICENSE gains an attribution pointer to NOVELTY.md.
+
 ## [3.1.1] — 2026-06-20
 Bugfix — `resona.brown` used `np.trapz`, which numpy 2.0 removed (renamed to
 `np.trapezoid`), breaking `brown_boxplus` on numpy ≥ 2.0 (the 3.1.0 CI failed on

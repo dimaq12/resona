@@ -26,13 +26,21 @@ slopes (measured `time ∝ N^s` on tridiagonal operators, N=64…512) are in **b
 | `flow.shock_time` | `O(n_t · averaged_dos)` | spectrum | ✓* | scans t (measured 31 s → 2.2 s on the vectorized grid) |
 | `defect.sigma_min(matvec,z)` | `O(k·C)` (2N realified Lanczos) | matvec (+rmatvec) | ✓ | dense path: one SVD `O(N³)`, exact |
 | `defect.pseudospectrum_radius` | `O(iters·sigma_min)` | matvec (+rmatvec) | ✓ | log-bisection on the bloom, ~60 σ_min calls |
+| `defect.normality(matvec,N,rmatvec)` | `O(p·C)` (p probes × matvec+rmatvec) | matvec (+rmatvec) | ✓ | global `‖[A,A*]‖²_F` by Hutchinson; the non-normality flag, no `eig` |
+| `defect.hard_points(family,ks,B)` | `O(\|ks\|·p·k_cg·C)` | matvec (+B matvec) | ✓ | EP / avoided-crossing locator: `argmax_k Φ_η` via Hutchinson+CG, never diagonalizes |
 | `cost.level_spacing_ratio(λ)` | `O(N log N)` | eigenvalues | — | 3 lines; resolve symmetry sectors first |
 | `defect.generator_read` | `O(N)` (a scaled difference) | two solver runs | ✓ | BE-specific constant; refuses CN (measured O(1) deviation) |
 | `defect.defect_barycentres` | `O(Σ\|band\|)` | the defect power in the caller's basis | ✓ | barycentre read; ±1-bin rounding; ~5× the ratio method's matvecs upstream |
-| `wkernel.track` | `O(steps·N³)` (one eigh per midpoint) | dense family (A0, B_j) | ✗ | crossing-safe; ~100× frozen-W accuracy per eigh; 44–302× fewer eigh than FD continuation |
-| `wkernel.kappa_w` | `O(probes·N³)` | dense family | ✗ | frozen-W ACCURACY dial (ρ=0.93); NOT a cost dial (blind ρ≈0.05) |
+| `wkernel.track(modes='all')` | `O(steps·N³)` (one eigh per midpoint) | dense family (A0, B_j) | ✗ | crossing-safe; ~100× frozen-W accuracy per eigh; 44–302× fewer eigh than FD continuation |
+| `wkernel.track(modes=k)` | `O(steps·N·k)` (one `eigsh` block per midpoint) | matvec family | ✓ | selected bottom/top-k modes, MATRIX-FREE — closes the W-side dense `O(N³)`; ~294× at N=4000, rel.err 1e-10; `guard` warns on a mode leaving the block |
+| `wkernel.kappa_w(modes='all')` | `O(probes·N³)` | dense family | ✗ | frozen-W ACCURACY dial (ρ=0.93); NOT a cost dial (blind ρ≈0.05) |
+| `wkernel.kappa_w(modes=k)` | `O(probes·N·k)` (`eigsh` sub-Jacobian) | matvec family | ✓ | curvature of the selected-mode sub-Jacobian, MATRIX-FREE — the conjugate W-side completed |
 | `subordination.contraction` | one `pastur_grid` + one G′ eval | spectrum | ✓* | pure read; critical window narrows with σ² (measured) |
 | `cloud(mv,N,k,p)` | `O(p·k·C + p·k²·N)` (Arnoldi+DGKS) | matvec | ✓ | complex Ritz cloud ⊂ numerical range; reads are transient-growth dials |
+| `brown.brown_measure(A)` | `O(grid·p·k·C)` — one SLQ log-det per grid point | matvec (+rmatvec) | ✓ | Brown measure via hermitization: `S(z)=(1/2N)Tr log((A−z)*(A−z))`, `μ=(1/2π)ΔS`; exact-SVD path is `O(grid·N³)` |
+| `brown.brown_boxplus(A,B)` | `O(grid·(per-z free conv.))` | spectra | ✓* | free additive sum of two Brown measures (per-z Hermitian free convolution of the hermitizations) |
+| `cloud_flow.cloud_wkernel / cloud_track` | `O(m·k_arn·C)` shift-invert Arnoldi (matrix-free) / `O(N³)` dense eig | matvec family | ✓ | biorthogonal `∂λ=(u*Bv)/(u*v)` from left+right Ritz pairs; EP locator (denom→0) |
+| `cost.rmt_class(λ)` | `O(N log N)` | eigenvalues | — | R4 / spacing universality class (Poisson / GOE / GUE) |
 | `lift.koopman(X)` | one thin SVD `O(n·T·min)` | snapshot matrix | — | returns the r×r reduced action; r = reported data rank |
 | `thermal.expect/correlator` | `O(probes·k·C)` / `·len(ts)·2` | matvec | ✓ | typicality error ~1/√D_eff, stderr reported |
 

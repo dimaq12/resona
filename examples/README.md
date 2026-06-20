@@ -82,11 +82,22 @@ python3 examples/<dir>/<name>.py
 | 🎯 `zeta_ascent.py` | Odlyzko's ascent: 100k zeros + #10^12 + #10^21 through two dials | ⟨r⟩=0.6000 at #10^12 (4 digits); β-rigidity excess decays 1.42x→1.06x |
 | 🎯 `koopman_dynamics.py` | your time series IS an operator (Koopman bridge) | odd-harmonic ladder to 7e-4 vs FFT; chaos rank grows ∝ window |
 
-## wild/ — for fun (still honest)
+## wild/ — for fun (still honest) · the "Professors' Wall" flagships
 | file | what | metric |
 |------|------|--------|
+| 🎯 `free_probability_calculator.py` | predict the FULL spectrum of `A⊞B` / `A⊠B` from the two spectra alone, never forming the composite; the certificate knows its domain | ~1% vs dense; `freeness_defect` blows up off-domain |
+| `sculpting_eigenvalues.py` | inverse spectral at scale — DESIGN `A(k)=A0+Σk_e B_e` so m chosen eigenvalues hit a target (matrix-free Hellmann–Feynman `W` + regularized `design`, sparse `eigsh`, no dense eigh) | m eigenvalues land on the target |
+| `certifying_catastrophe.py` | the spectrum LIES for non-normal flow — predict transient growth + GMRES stall at the deepest ε-bloom, matrix-free, BEFORE any solve (`defect.normality` + `hard_points`) | locates the hard `z`; normal twin converges fast |
+| `two_numbers_whole_spectrum.py` | support + 2 moments → the ENTIRE N-eigenvalue spectrum (Beta max-entropy) + a Gauss–Radau-certified log-det | <2% of span; certified interval contains the exact value |
+| `kesten_mckay_at_scale.py` | the spectral density of a million-node d-regular graph, matrix-free, vs the analytic Kesten–McKay law | bulk <1%; edges smoothed (reported) |
 | 🎯 `impossible_structures.py` | 1-look sorter + spectral hash + invisible store | EXACT sort, secret recovered 0 bit-err |
 | `sacred_constants.py` | 100+ math constants as one operator (toy) | eff_rank 20.5/115 in log-space |
+
+## data/ — the spectral lens on machine learning
+| file | what | metric |
+|------|------|--------|
+| `hessian_spectrum.py` | the loss Hessian spectrum from HVPs alone — a bulk of flat directions plus a few sharp outliers, never forming the d×d Hessian | `effective_rank` + sharpest λ vs dense |
+| `effective_dof.py` | the effective degrees of freedom `Tr(K(K+λI)⁻¹)` of a ridge/kernel fit, matrix-free over a λ-sweep — the AIC/GCV complexity curve | DoF(λ) vs the dense `Σσ/(σ+λ)` |
 
 ---
 

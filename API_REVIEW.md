@@ -100,6 +100,30 @@ principled.  The surface holds — what follows is sanding, not surgery.
    is re-exported at top level.
 6. `__all__` coverage for the 8 modules that define their surface implicitly.
 
+## THE 3.0/3.1 PASS (non-Hermitian corner CLOSED, 2026-06)
+
+The 1.3/2.0 reviews left one structural asymmetry standing: the **five verbs**
+(READ / TRUST / MOVE / COMPOSE / plane-READ) were complete for Hermitian
+operators (`Spectral`) but the non-Hermitian face (`cloud`) had only **READ**
+(the Ritz cloud) and **TRUST** (`sigma_min` / pseudospectrum brackets). 3.0/3.1
+close it:
+
+- **MOVE** — `cloud_flow.cloud_wkernel` / `cloud_track`: the biorthogonal
+  `∂λ=(u*Bv)/(u*v)` (left+right eigvecs via Arnoldi / shift-invert), the
+  non-Hermitian twin of `wkernel.wkernel` / `track`; reduces to them exactly
+  when A is Hermitian. EP locator falls out (denom→0).
+- **COMPOSE / plane-READ** — `resona.brown`: the Brown measure by hermitization
+  (`S(z)=(1/2N)Tr log((A−z)*(A−z))`, `μ=(1/2π)ΔS`, matrix-free SLQ log-det per
+  grid point), with `brown_boxplus` the per-z free additive sum. The first
+  read that returns a measure on the **complex plane**, and the compose verb on
+  it.
+
+All five verbs now work for BOTH Hermitian and non-Hermitian operators —
+the `Spectral`/`cloud` split is a representation choice, no longer a
+capability gap. The W-side dense `O(N³)` (`kappa_w`/`track`) is also closed
+for selected modes (`modes=k`, `eigsh` on the tracked block), so the
+matrix-free contract now holds across the whole verb table, Hermitian or not.
+
 ## Scoreboard
 
 - Newcomer task-guess rate: **8/10** before docs.
