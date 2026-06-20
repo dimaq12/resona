@@ -67,6 +67,9 @@ check.
 """
 import numpy as np
 
+# numpy 2.0 renamed np.trapz → np.trapezoid (and removed the old name); support both.
+_trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+
 __all__ = ["log_potential", "brown_measure", "brown_boxplus"]
 
 
@@ -389,11 +392,11 @@ def brown_boxplus(A, B, N=None, grid=(-2.2, 2.2, -2.2, 2.2, 21),
         span = float(np.max(np.abs(tA)) + np.max(np.abs(tB))) + span_pad
         xs = np.linspace(-span, span, int(nfreq))
         dos = _free_add_dos(tA, wA, tB, wB, xs, eta_free, iters=120)
-        Z0 = np.trapz(dos, xs)
+        Z0 = _trapz(dos, xs)
         if Z0 > 0:
             dos = dos / Z0                       # renormalize the η-broadened DOS
         xr = np.where(np.abs(xs) < sigma_floor, sigma_floor, np.abs(xs))
-        S[i] = float(np.trapz(np.log(xr) * dos, xs))
+        S[i] = float(_trapz(np.log(xr) * dos, xs))
 
     S = S.reshape(Z.shape)
     lap = np.zeros_like(S)

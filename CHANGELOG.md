@@ -3,6 +3,12 @@
 All notable changes to resona.  The discipline throughout: every number below
 is printed by a test or a gallery stand, not asserted by hand.
 
+## [3.1.1] — 2026-06-20
+Bugfix — `resona.brown` used `np.trapz`, which numpy 2.0 removed (renamed to
+`np.trapezoid`), breaking `brown_boxplus` on numpy ≥ 2.0 (the 3.1.0 CI failed on
+Python 3.12).  Use a version-safe `_trapz = getattr(np, "trapezoid", np.trapz)`.
+140 tests green on numpy 2.2.
+
 ## [3.1.0] — 2026-06-20
 Close the non-Hermitian corner — `cloud` gains MOVE and COMPOSE.  Until now the
 non-self-adjoint side had only READ (the Ritz `cloud`) and TRUST (`sigma_min`,
