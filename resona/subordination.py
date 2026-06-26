@@ -14,22 +14,41 @@ spectrum of A alone.  The contraction of the fixed point is fast in the bulk and
 slows to a crawl at the spectral EDGE (critical slowing) — the defect / edge of
 chaos of free probability's own computation.
 """
+from __future__ import annotations
+
+import warnings
+
 import numpy as np
 from .lift import _nw, cauchy as _cauchy   # internal; the public read is lift.cauchy / s.cauchy
 
 
-def pastur(GA, z, sigma2, iters=2000, tol=1e-13, damp=0.5):
-    """Solve the subordination fixed point g = G_A(z − σ²·g) for complex z."""
+def pastur(GA, z, sigma2: float, iters: int = 2000, tol: float = 1e-13,
+           damp: float = 0.5):
+    """Solve the subordination fixed point g = G_A(z − σ²·g) for complex z.
+
+    Warns (RuntimeWarning) if the fixed point has not contracted below `tol`
+    within `iters` — near a spectral edge the iteration critically slows and the
+    returned g is then only an approximation (a wrong branch would read as a
+    silent ρ = 0, not an error)."""
     g = GA(z)
+    res = np.inf
     for _ in range(iters):
         gn = GA(z - sigma2 * g)
-        if abs(gn - g) < tol:
+        res = abs(gn - g)
+        if res < tol:
             return gn
         g = (1 - damp) * g + damp * gn
+    if res > tol:
+        warnings.warn(
+            f"pastur: fixed point did not converge in {iters} iters "
+            f"(residual {float(res):.2e} > tol {tol:.1e}); g may be inaccurate "
+            f"near the spectral edge",
+            RuntimeWarning, stacklevel=2)
     return g
 
 
-def pastur_grid(spectral, zs, sigma2, iters=2000, tol=1e-13, damp=0.5, g0=None):
+def pastur_grid(spectral, zs, sigma2: float, iters: int = 2000,
+                tol: float = 1e-13, damp: float = 0.5, g0=None):
     """The subordination fixed point g = G_A(z − σ²·g) solved on a whole grid of
     complex z AT ONCE — one vectorized damped iteration with an active mask
     (converged points freeze), instead of len(zs) scalar solves.  Same fixed
@@ -54,7 +73,7 @@ def pastur_grid(spectral, zs, sigma2, iters=2000, tol=1e-13, damp=0.5, g0=None):
     return g
 
 
-def averaged_dos(spectral, sigma, xs, eta=1e-3, g0=None):
+def averaged_dos(spectral, sigma: float, xs, eta: float = 1e-3, g0=None):
     """Density of  μ_A ⊞ semicircle(σ²)  (= A + σ·GOE, disorder-averaged), on xs.
 
     Closed form via the Pastur fixed point — no disorder realizations, no eig.
@@ -71,7 +90,7 @@ def averaged_dos(spectral, sigma, xs, eta=1e-3, g0=None):
     #  with a semicircle, or read off as m₂ = m₂(A) + σ² — no separate function.)
 
 
-def contraction(spectral, xs, sigma2, eta=1e-9):
+def contraction(spectral, xs, sigma2: float, eta: float = 1e-9):
     """|T′(g*)| — the stability of the Pastur fixed point at each x.
 
     The subordination iteration g ← G_A(z − σ²g) contracts at rate

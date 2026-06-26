@@ -13,10 +13,14 @@ return gives the exact spectral DESIGN map: predict how the spectrum shifts unde
 any parameter change, and INVERT it to choose k that hits a target spectrum.
 This is the W-kernel that the FA program is built on, made a first-class primitive.
 """
+from __future__ import annotations
+
+from typing import Sequence
+
 import numpy as np
 
 
-def wkernel(eigvecs, perturbations):
+def wkernel(eigvecs, perturbations: Sequence) -> np.ndarray:
     """W[i,j] = v_iᵀ B_j v_i = ∂λ_i/∂k_j.
 
     eigvecs       : (N, m) array, columns are the eigenvectors of interest.
@@ -34,7 +38,7 @@ def wkernel(eigvecs, perturbations):
     return W
 
 
-def design(W, target_shift, reg=0.0, rcond=None):
+def design(W, target_shift, reg: float = 0.0, rcond: float | None = None) -> np.ndarray:
     """Parameter step dk so that W·dk ≈ target_shift (λ_target − λ_0).
 
     One Hellmann–Feynman design step — no finite differences, no per-parameter
@@ -54,7 +58,8 @@ def design(W, target_shift, reg=0.0, rcond=None):
     return Vt.T @ ((s / (s ** 2 + reg * s[0] ** 2)) * (U.T @ y))
 
 
-def track(A0, perturbations, path, steps=1, modes="all", guard=True):
+def track(A0, perturbations: Sequence, path, steps: int = 1,
+          modes="all", guard: bool = True) -> tuple[np.ndarray, np.ndarray]:
     """Integrate the spectral flow  dλ = W(k)·dk  along a parameter path —
     eigenvalues followed by EIGENVECTOR CONTINUATION, so crossings do not
     scramble them (sorted eigenvalues break by O(1) at a crossing; the
@@ -119,8 +124,10 @@ def track(A0, perturbations, path, steps=1, modes="all", guard=True):
     from scipy.sparse.linalg import eigsh
     m = abs(int(modes)); which = "SA" if modes > 0 else "LA"
     sparse_in = sp.issparse(A0)
+    N = A0.shape[0]
     Mp = path.shape[1]
     kg = m + 1 if guard else m
+    kg = min(kg, N)                                  # cannot ask for more modes than N
 
     def build(k):
         if sparse_in:
@@ -128,10 +135,27 @@ def track(A0, perturbations, path, steps=1, modes="all", guard=True):
         return np.asarray(A0, float) + sum(float(k[j]) * np.asarray(Bs[j], float)
                                            for j in range(Mp))
 
+    def block(k):
+        """The kg extreme eigenpairs of build(k): eigsh on the large-N path,
+        dense eigh when kg >= N (eigsh requires k < N) — same selected block."""
+        mat = build(k)
+        if kg >= N:                                  # eigsh needs k<N → dense fallback
+            dense = mat.toarray() if sp.issparse(mat) else np.asarray(mat, float)
+            w, Vf = np.linalg.eigh(dense)
+            sel = np.arange(kg) if which == "SA" else np.arange(N - kg, N)
+            return w[sel], Vf[:, sel]
+        try:
+            return eigsh(mat, k=kg, which=which)
+        except Exception as e:                       # non-convergence → a clear error
+            raise RuntimeError(
+                f"track: eigsh failed to converge for the bottom/top-{kg} block "
+                f"(N={N}, which={which}); raise |modes|, use modes='all', or "
+                f"precondition the family.") from e
+
     def Bmv(j, v):
         B = Bs[j]; return B(v) if callable(B) else (B @ v)
 
-    vals0, V0 = eigsh(build(path[0]), k=kg, which=which)
+    vals0, V0 = block(path[0])
     o = np.argsort(vals0); vals0, V0 = vals0[o], V0[:, o]
     V = V0[:, :m]; lam = vals0[:m].copy(); lams = [lam.copy()]
     warned = False
@@ -139,9 +163,9 @@ def track(A0, perturbations, path, steps=1, modes="all", guard=True):
         for s in range(steps):
             a = path[seg - 1] + (path[seg] - path[seg - 1]) * s / steps
             b = path[seg - 1] + (path[seg] - path[seg - 1]) * (s + 1) / steps
-            vm, Vm = eigsh(build(0.5 * (a + b)), k=kg, which=which)
+            vm, Vm = block(0.5 * (a + b))
             o = np.argsort(vm); vm, Vm = vm[o], Vm[:, o]
-            if guard and not warned and (vm[m] - vm[m - 1]) < 1e-3 * max(vm[-1] - vm[0], 1e-30):
+            if guard and not warned and m < len(vm) and (vm[m] - vm[m - 1]) < 1e-3 * max(vm[-1] - vm[0], 1e-30):
                 warnings.warn(f"track(modes={modes}): a mode is leaving the selected "
                               "block (boundary gap closing) — selected-block tracking "
                               "may lose accuracy; raise |modes| or use modes='all'.")
@@ -157,7 +181,7 @@ def track(A0, perturbations, path, steps=1, modes="all", guard=True):
     return np.array(lams), V
 
 
-def _selected_W(A0, perturbations, k, modes):
+def _selected_W(A0, perturbations: Sequence, k, modes) -> np.ndarray:
     """W-block of the `modes` selected eigenvectors — MATRIX-FREE when modes≠'all'.
 
     modes : 'all'  → dense eigh, W over ALL eigenvectors (the original, O(N³));
@@ -188,9 +212,12 @@ def _selected_W(A0, perturbations, k, modes):
                      for i in range(m)])
 
 
-def kappa_w(A0, perturbations, k0, eps=1e-5, probes=8, seed=0, full=False, modes="all"):
-    """κ_W — the local curvature of the spectral-flow kernel:
-    max over random unit directions of ‖W(k₀+εu) − W(k₀)‖_F / ε.
+def kappa_w(A0, perturbations: Sequence, k0, eps: float = 1e-5, probes: int = 8,
+            seed: int = 0, full: bool = False, modes="all"):
+    """κ_W — the local Lipschitz slope of the spectral-flow kernel W:
+    max over random unit directions of ‖W(k₀+εu) − W(k₀)‖_F / ε (a one-sided
+    first difference).  Because W = ∂λ/∂k, this slope is the local CURVATURE of
+    the eigenvalue flow λ(k) — the second-order term frozen-W prediction drops.
 
     WHAT IT PREDICTS (and the first thing to know): the ACCURACY of a
     frozen-W prediction over a step (Spearman ρ = 0.929 against measured

@@ -21,13 +21,18 @@ stderr reports this).  Krylov imaginary/real-time steps inherit `apply`'s k
 budget: large β·‖H‖ or t·‖H‖ may need larger k — verified against dense
 ground truth in tests on small chains.
 """
+from __future__ import annotations
+
+from typing import Callable
+
 import numpy as np
 from .spectral import apply as _apply
 
 __all__ = ["state", "expect", "correlator"]
 
 
-def state(Hmv, beta, N, seed=0, k=64):
+def state(Hmv: Callable, beta: float, N: int, seed: int = 0,
+          k: int = 64) -> tuple[np.ndarray, float]:
     """|ψ_β⟩ = e^{−βH/2}|r⟩ (normalized) and its weight ‖e^{−βH/2}r‖².
 
     The weight is the probe's share of the partition function:
@@ -36,13 +41,17 @@ def state(Hmv, beta, N, seed=0, k=64):
     r = rng.standard_normal(N) / np.sqrt(N)
     psi = _apply(Hmv, lambda lam: np.exp(-0.5 * beta * lam), r, k=k)
     w = float(np.real(np.vdot(psi, psi)))
+    w = max(w, np.finfo(float).tiny)                        # floor: large β underflow
     return psi / np.sqrt(w), w * N
 
 
-def expect(Hmv, Omv, beta, N, probes=8, k=64, seed=0):
+def expect(Hmv: Callable, Omv: Callable, beta: float, N: int, probes: int = 8,
+           k: int = 64, seed: int = 0) -> tuple[float, float]:
     """⟨O⟩_β = Tr[O e^{−βH}]/Z by typicality, probe-averaged.
 
     Returns (value, stderr) — the honest pair, like `trace(with_err=True)`."""
+    if probes < 1:
+        raise ValueError("probes must be >= 1")
     vals, wts = [], []
     for p in range(probes):
         psi, w = state(Hmv, beta, N, seed=seed + p, k=k)
@@ -56,7 +65,8 @@ def expect(Hmv, Omv, beta, N, probes=8, k=64, seed=0):
     return mean, float(np.std(dev, ddof=1) / np.sqrt(probes))
 
 
-def correlator(Hmv, Omv, beta, ts, N, probes=4, k=64, seed=0):
+def correlator(Hmv: Callable, Omv: Callable, beta: float, ts, N: int,
+               probes: int = 4, k: int = 64, seed: int = 0) -> np.ndarray:
     """C(t) = ⟨O(t) O⟩_β = ⟨ψ_β| e^{iHt} O e^{−iHt} O |ψ_β⟩, typicality-averaged.
 
     Per probe and time: two real-time Krylov evolutions (`apply`,
@@ -80,6 +90,14 @@ def correlator(Hmv, Omv, beta, ts, N, probes=4, k=64, seed=0):
             step = lambda v: _apply(Hmv, lambda lam: np.exp(-1j * dt * lam),
                                    v, k=k, hermitian=False)
             psi_t, phi_t = psi.astype(complex), phi
+            if ts[0] != 0.0:
+                # grid starts at t0≠0: evolve the β-state pair to t0 BEFORE the
+                # incremental loop, else i=0 would report C(t−ts[0]).
+                t0 = float(ts[0])
+                evolve0 = lambda v: _apply(Hmv,
+                                           lambda lam: np.exp(-1j * t0 * lam),
+                                           v, k=k, hermitian=False)
+                psi_t, phi_t = evolve0(psi_t), evolve0(phi_t)
             for i, t in enumerate(ts):
                 if i > 0:
                     psi_t, phi_t = step(psi_t), step(phi_t)

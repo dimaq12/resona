@@ -65,6 +65,10 @@ exactly at the σ_min → 0 ridge (on supp μ_A), where more probes / Lanczos st
 CIRCULAR LAW (where the law is clean and analytically known) as the primary
 check.
 """
+from __future__ import annotations
+
+import warnings
+
 import numpy as np
 
 # numpy 2.0 renamed np.trapz → np.trapezoid (and removed the old name); support both.
@@ -116,17 +120,27 @@ def _realified_AHA(matvec, rmatvec, N, z):
     return lambda x: Bt(B(x))
 
 
-def _coerce(A, N, rmatvec):
+def _coerce(A, N, rmatvec, assume_self_adjoint=False):
     """Return (matvec, rmatvec, N) for a dense array or matvec+rmatvec pair.
 
     The matvecs are wrapped so they ALWAYS receive a complex input and return a
     complex ndarray (the realification reads Re/Im of the output).
+
+    For a CALLABLE operator the adjoint cannot be derived from the black box, so
+    one of `rmatvec=A^*·x` or `assume_self_adjoint=True` (a genuinely Hermitian
+    A, where A^* = A) is required — using A as its own adjoint silently is the
+    classic non-Hermitian trap and is refused.
     """
     if callable(A):
         if N is None:
             raise ValueError("brown: a matvec needs N (and rmatvec = A^*·x for a "
                              "non-symmetric / non-Hermitian operator)")
-        rmv = rmatvec if rmatvec is not None else A     # symmetric default
+        if rmatvec is None and not assume_self_adjoint:
+            raise ValueError(
+                "brown: a non-dense operator needs rmatvec=A^*·x; pass the "
+                "adjoint, or assume_self_adjoint=True for a genuinely "
+                "self-adjoint A")
+        rmv = rmatvec if rmatvec is not None else A     # self-adjoint: A^* = A
         mv_c = lambda x, f=A: np.asarray(f(np.asarray(x, complex)), complex)
         rmv_c = lambda x, f=rmv: np.asarray(f(np.asarray(x, complex)), complex)
         return mv_c, rmv_c, int(N)
@@ -137,12 +151,14 @@ def _coerce(A, N, rmatvec):
            (lambda x: Mc @ np.asarray(x, complex)), n
 
 
-def log_potential(A, z, N=None, rmatvec=None, k=64, probes=16, seed=0,
-                  eta=0.0, exact=False):
+def log_potential(A, z, N: int | None = None, rmatvec=None, k: int = 64,
+                  probes: int = 16, seed: int = 0, eta: float = 0.0,
+                  exact: bool = False, assume_self_adjoint: bool = False):
     """The log-potential  S(z) = (1/N) Σ_i log σ_i(A − zI)  at one or many z.
 
     A        : dense square ndarray, OR a matvec callable (then pass N, and
-               rmatvec = A^*·x for a non-symmetric/non-Hermitian operator).
+               rmatvec = A^*·x for a non-symmetric/non-Hermitian operator, or
+               assume_self_adjoint=True for a genuinely self-adjoint A).
     z        : scalar or array of complex grid points.
     eta      : regulariser; returns (1/2N) Tr log((A−z)^*(A−z) + η²).  η = 0 is
                the bare log-potential.  Raise η near the σ_min→0 ridge.
@@ -173,7 +189,7 @@ def log_potential(A, z, N=None, rmatvec=None, k=64, probes=16, seed=0,
         return float(out[0]) if scalar else out
 
     import resona
-    matvec, rmv, n = _coerce(A, N, rmatvec)
+    matvec, rmv, n = _coerce(A, N, rmatvec, assume_self_adjoint)
     f = np.log if eta2 == 0.0 else (lambda x: np.log(x + eta2))
     out = np.empty(len(zs))
     for i, zz in enumerate(zs):
@@ -198,6 +214,10 @@ def _grid(grid):
         xs, ys = np.asarray(grid[0], float), np.asarray(grid[1], float)
     else:
         raise ValueError("grid = (xmin,xmax,ymin,ymax,n) or (xs, ys)")
+    if len(xs) < 3 or len(ys) < 3:
+        raise ValueError(
+            "brown: grid needs ≥3 points per axis (the 5-point Laplacian has an "
+            f"empty interior otherwise); got {len(xs)}×{len(ys)}")
     X, Y = np.meshgrid(xs, ys)                   # X[i,j]=xs[j], Y[i,j]=ys[i]
     Z = X + 1j * Y
     hx = float(xs[1] - xs[0])
@@ -205,8 +225,10 @@ def _grid(grid):
     return X, Y, Z, hx, hy
 
 
-def brown_measure(A, N=None, grid=(-1.6, 1.6, -1.6, 1.6, 41), rmatvec=None,
-                  k=64, probes=16, seed=0, eta=0.0, exact=False):
+def brown_measure(A, N: int | None = None, grid=(-1.6, 1.6, -1.6, 1.6, 41),
+                  rmatvec=None, k: int = 64, probes: int = 16, seed: int = 0,
+                  eta: float = 0.0, exact: bool = False,
+                  assume_self_adjoint: bool = False) -> dict:
     """The Brown measure μ_A on a complex grid — the matrix-free eigenvalue
     DENSITY in the plane.
 
@@ -240,7 +262,8 @@ def brown_measure(A, N=None, grid=(-1.6, 1.6, -1.6, 1.6, 41), rmatvec=None,
     X, Y, Z, hx, hy = _grid(grid)
     flatZ = Z.ravel()
     S = log_potential(A, flatZ, N=N, rmatvec=rmatvec, k=k, probes=probes,
-                      seed=seed, eta=eta, exact=exact).reshape(Z.shape)
+                      seed=seed, eta=eta, exact=exact,
+                      assume_self_adjoint=assume_self_adjoint).reshape(Z.shape)
 
     # 5-point Laplacian  ΔS ≈ (S_xx + S_yy); interior only, edges → 0.
     lap = np.zeros_like(S)
@@ -249,7 +272,9 @@ def brown_measure(A, N=None, grid=(-1.6, 1.6, -1.6, 1.6, 41), rmatvec=None,
         (S[2:, 1:-1] - 2 * S[1:-1, 1:-1] + S[:-2, 1:-1]) / hy ** 2)    # ∂²/∂y²
     mu_raw = lap / (2.0 * np.pi)
     mu = np.maximum(mu_raw, 0.0)
-    mass = float(mu.sum() * hx * hy)
+    # mass integrates the SIGNED density (mu_raw), not the clipped mu: clipping
+    # the SLQ-noise undershoot to 0 would inflate the reported mass.
+    mass = float(mu_raw.sum() * hx * hy)
     return {"X": X, "Y": Y, "Z": Z, "S": S, "mu": mu, "mu_raw": mu_raw,
             "mass": mass}
 
@@ -281,7 +306,7 @@ def _signed_sv_measure(matvec, rmatvec, N, z, k, probes, seed):
     return t, ww / ww.sum()
 
 
-def _free_add_dos(tA, wA, tB, wB, xs, eta, iters=600, tol=1e-12):
+def _free_add_dos(tA, wA, tB, wB, xs, eta, iters=600, tol=1e-12, warn_tol=1e-4):
     """Density of states of the free additive convolution μ_A ⊞ μ_B on `xs`.
 
     Belinschi–Bercovici subordination fixed point: there are ω_A(z), ω_B(z) in
@@ -306,16 +331,29 @@ def _free_add_dos(tA, wA, tB, wB, xs, eta, iters=600, tol=1e-12):
     z = np.asarray(xs, float) + 1j * eta
     wAo = z.copy()
     wBo = z.copy()
+    res = np.inf
+    converged = False
     for _ in range(iters):
         nA = z + (1.0 / GB(wBo) - wBo)                # z + h_B(ω_B)
         nA = nA.real + 1j * np.maximum(nA.imag, eta)  # keep in upper half-plane
         nB = z + (1.0 / GA(nA) - nA)                  # z + h_A(ω_A)
         nB = nB.real + 1j * np.maximum(nB.imag, eta)
-        if np.max(np.abs(nA - wAo) + np.abs(nB - wBo)) < tol:
+        res = float(np.max(np.abs(nA - wAo) + np.abs(nB - wBo)))
+        if res < tol:
             wAo, wBo = nA, nB
+            converged = True
             break
         wAo = 0.5 * wAo + 0.5 * nA
         wBo = 0.5 * wBo + 0.5 * nB
+    # The damped iteration plateaus a little above `tol` for an η-broadened DOS;
+    # only a residual still above `warn_tol` signals a GENUINE failure (a stalled
+    # or wrong-branch fixed point that would read as a silent biased ρ).
+    if not converged and res > warn_tol:
+        warnings.warn(
+            f"brown._free_add_dos: subordination fixed point did not converge in "
+            f"{iters} iters (residual {res:.2e} > warn_tol {warn_tol:.1e}); "
+            f"ρ may be biased",
+            RuntimeWarning, stacklevel=2)
     G = GA(wAo)
     return np.maximum(-G.imag / np.pi, 0.0)
 
@@ -348,10 +386,12 @@ def _sv_measure_dense(Ad, z, N):
     return t, w
 
 
-def brown_boxplus(A, B, N=None, grid=(-2.2, 2.2, -2.2, 2.2, 21),
-                  rmatvecA=None, rmatvecB=None, k=64, probes=16, seed=0,
-                  eta_free=1e-2, sigma_floor=1e-3, span_pad=0.5, nfreq=121,
-                  exact=False, nbins=80):
+def brown_boxplus(A, B, N: int | None = None, grid=(-2.2, 2.2, -2.2, 2.2, 21),
+                  rmatvecA=None, rmatvecB=None, k: int = 64, probes: int = 16,
+                  seed: int = 0, eta_free: float = 1e-2,
+                  sigma_floor: float = 1e-3, span_pad: float = 0.5,
+                  nfreq: int = 121, exact: bool = False, nbins: int = 80,
+                  assume_self_adjoint: bool = False) -> dict:
     """(STRETCH) The Brown measure of a *-FREE sum A + B, from the per-z free
     convolution of the two HERMITIZED symmetrized singular distributions.
 
@@ -370,8 +410,8 @@ def brown_boxplus(A, B, N=None, grid=(-2.2, 2.2, -2.2, 2.2, 21),
     regularised at `sigma_floor` and the DOS is η-broadened at `eta_free`; both
     bias S a little.  This is a sanity-level free-sum read, not a sharp law.
     """
-    matA, rmvA, n = _coerce(A, N, rmatvecA)
-    matB, rmvB, nB = _coerce(B, N, rmatvecB)
+    matA, rmvA, n = _coerce(A, N, rmatvecA, assume_self_adjoint)
+    matB, rmvB, nB = _coerce(B, N, rmatvecB, assume_self_adjoint)
     if n != nB:
         raise ValueError(f"A and B must act on the same dimension ({n} vs {nB})")
     Ad = np.asarray(A) if exact else None        # dense fast path for the symm. measure
@@ -385,16 +425,19 @@ def brown_boxplus(A, B, N=None, grid=(-2.2, 2.2, -2.2, 2.2, 21),
             tA, wA = _sv_measure_dense(Ad, zz, n)
             tB, wB = _sv_measure_dense(Bd, zz, n)
         else:
+            # distinct seeds: a shared probe seed couples the two SLQ estimates.
             tA, wA = _signed_sv_measure(matA, rmvA, n, zz, k, probes, seed)
-            tB, wB = _signed_sv_measure(matB, rmvB, n, zz, k, probes, seed)
+            tB, wB = _signed_sv_measure(matB, rmvB, n, zz, k, probes, seed + 1)
         tA, wA = _bin_atoms(tA, wA, nbins)       # 2N atoms → ~nbins: ~Nx cheaper free conv
         tB, wB = _bin_atoms(tB, wB, nbins)
         span = float(np.max(np.abs(tA)) + np.max(np.abs(tB))) + span_pad
         xs = np.linspace(-span, span, int(nfreq))
         dos = _free_add_dos(tA, wA, tB, wB, xs, eta_free, iters=120)
         Z0 = _trapz(dos, xs)
-        if Z0 > 0:
-            dos = dos / Z0                       # renormalize the η-broadened DOS
+        if Z0 <= 0:
+            S[i] = np.nan                        # degenerate DOS → no log-potential
+            continue
+        dos = dos / Z0                           # renormalize the η-broadened DOS
         xr = np.where(np.abs(xs) < sigma_floor, sigma_floor, np.abs(xs))
         S[i] = float(_trapz(np.log(xr) * dos, xs))
 
@@ -405,7 +448,8 @@ def brown_boxplus(A, B, N=None, grid=(-2.2, 2.2, -2.2, 2.2, 21),
         (S[2:, 1:-1] - 2 * S[1:-1, 1:-1] + S[:-2, 1:-1]) / hy ** 2)
     mu_raw = lap / (2.0 * np.pi)
     mu = np.maximum(mu_raw, 0.0)
-    mass = float(mu.sum() * hx * hy)
+    # integrate the SIGNED density (mu_raw), not the clipped mu (see brown_measure).
+    mass = float(mu_raw.sum() * hx * hy)
     return {"X": X, "Y": Y, "Z": Z, "S": S, "mu": mu, "mu_raw": mu_raw,
             "mass": mass}
 

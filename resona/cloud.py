@@ -22,6 +22,8 @@ What the cloud is good for, with the right epistemics:
   damping rates; for NORMAL operators these are ordinary Ritz values and
   converge to eigenvalues.
 """
+from __future__ import annotations
+
 import numpy as np
 
 __all__ = ["Cloud", "cloud"]
@@ -36,6 +38,7 @@ def _arnoldi_ritz(matvec, v0, k):
     m = k
     for j in range(k):
         w = np.asarray(matvec(Q[:, j]), complex)
+        norm_before = np.linalg.norm(w)           # RELATIVE breakdown reference
         for i in range(j + 1):
             H[i, j] = np.vdot(Q[:, i], w)
             w -= H[i, j] * Q[:, i]
@@ -44,7 +47,9 @@ def _arnoldi_ritz(matvec, v0, k):
         w -= Q[:, :j + 1] @ corr                  # Ritz cloud inside W(A)
         h = np.linalg.norm(w)
         H[j + 1, j] = h
-        if h < 1e-12:
+        # breakdown is a RELATIVE loss of rank: scale by the pre-orthogonalization
+        # norm so a tiny-norm operator is not truncated by an absolute floor.
+        if h <= 1e-12 * norm_before:
             m = j + 1
             break
         Q[:, j + 1] = w / h
@@ -81,7 +86,8 @@ class Cloud:
                 f"radius≥{self.radius():.3g}, abscissa≥{self.abscissa():.3g})")
 
 
-def cloud(matvec, N=None, k=48, probes=4, seed=0):
+def cloud(matvec, N: int | None = None, k: int = 48, probes: int = 4,
+          seed: int = 0) -> "Cloud":
     """Probe a NON-HERMITIAN operator: Arnoldi from `probes` random vectors,
     pooled complex Ritz values.  See the module docstring for what these
     values are — and are not.

@@ -25,44 +25,55 @@ spectrum.  Two consequences are exposed here:
   (`theory/hardness_exponents.py`).  GMRES/Arnoldi convergence follows the
   pseudospectrum, not the spectrum.
 """
+from __future__ import annotations
+
+from typing import Callable, Sequence
+
 import numpy as np
 
 
-def defect(P_n, P_2n):
+def defect(P_n, P_2n) -> np.ndarray:
     """The defect D_n = P_n − P_{2n} — the module's OWNED OBJECT.
 
     Yes, it is a subtraction.  It exists as a named function because the
     whole module is a calculus on this quantity (richardson, defect_jump,
     generator_read, spectroscopy all consume it): naming the boundary is
     the point, the arithmetic is incidental."""
-    return np.asarray(P_n) - np.asarray(P_2n)
+    a = np.asarray(P_n)
+    b = np.asarray(P_2n)
+    if a.shape != b.shape:
+        raise ValueError("P_n and P_2n must have the same shape")
+    return a - b
 
 
-def richardson(P_n, P_2n, p=1):
+def richardson(P_n, P_2n, p: float = 1) -> np.ndarray:
     """One Richardson step for error ~ n^{-p}: (2^p P_{2n} − P_n)/(2^p − 1)."""
+    if p <= 0:
+        raise ValueError("richardson needs p>0")
     f = 2.0 ** p
     return (f * np.asarray(P_2n) - np.asarray(P_n)) / (f - 1.0)
 
 
-def richardson_limit(values, ns, p0=1.0):
+def richardson_limit(values: Sequence, ns: Sequence, p0: float = 1.0):
     """Extrapolate a sequence values[k] sampled at resolutions ns[k] (assumed a
     geometric doubling) to n→∞ via a Neville/Richardson tableau on error ~ n^{-p}.
 
     Returns the top-of-tableau estimate of the limit.
     """
-    v = [np.asarray(x, float) for x in values]
+    v = [np.asarray(x) for x in values]
     ns = list(ns); L = len(v)
     T = [v[:]]                                              # T[0] = raw column
     for col in range(1, L):
         prev = T[col - 1]; newcol = [None] * L
         for k in range(col, L):
-            r = (ns[k] / ns[k - col]) ** (p0 * col)         # ratio of resolutions^p
+            r = (ns[k] / ns[k - col]) ** p0                 # Neville ratio (resolutions^p)
             newcol[k] = (r * prev[k] - prev[k - 1]) / (r - 1.0)
         T.append(newcol)
     return T[L - 1][L - 1]
 
 
-def sigma_min(A, z, N=None, rmatvec=None, k=96, seed=0):
+def sigma_min(A, z, N: int | None = None, rmatvec: Callable | None = None,
+              k: int = 96, seed: int = 0) -> float:
     """Smallest singular value of (A − zI).
 
     A : square ndarray (exact, via SVD) OR a matvec callable (then pass N and,
@@ -97,7 +108,8 @@ def sigma_min(A, z, N=None, rmatvec=None, k=96, seed=0):
     return float(np.sqrt(max(lam_min, 0.0)))
 
 
-def normality(A, N=None, rmatvec=None, probes=48, groups=6, seed=0):
+def normality(A, N: int | None = None, rmatvec: Callable | None = None,
+              probes: int = 48, groups: int = 6, seed: int = 0) -> tuple[float, float]:
     """Departure-from-normality ENERGY  ‖[A, A*]‖²_F = ‖A A* − A* A‖²_F.
 
     Zero ⇔ A is NORMAL (commutes with its adjoint — Hermitian / skew / unitary).
@@ -140,7 +152,9 @@ def normality(A, N=None, rmatvec=None, probes=48, groups=6, seed=0):
     return est, se
 
 
-def hard_points(family, ks, B, N=None, E=0.0, eta=0.08, probes=8, seed=0, cg_tol=1e-7):
+def hard_points(family: Callable, ks, B, N: int | None = None, E: float = 0.0,
+                eta: float = 0.08, probes: int = 8, seed: int = 0,
+                cg_tol: float = 1e-7) -> tuple[float, np.ndarray]:
     """Locate the HARD points of a parametric family — avoided crossings /
     exceptional points / transitions — MATRIX-FREE, with NO eigendecomposition.
 
@@ -196,8 +210,10 @@ def hard_points(family, ks, B, N=None, E=0.0, eta=0.08, probes=8, seed=0, cg_tol
     return float(ks[int(np.argmax(profile))]), profile
 
 
-def pseudospectrum_radius(A, eps, z0=0.0, N=None, rmatvec=None, direction=1.0,
-                          r_max=None, k=96, iters=60):
+def pseudospectrum_radius(A, eps: float, z0: complex = 0.0, N: int | None = None,
+                          rmatvec: Callable | None = None, direction: complex = 1.0,
+                          r_max: float | None = None, k: int = 96,
+                          iters: int = 60) -> float:
     """The local ε-pseudospectrum radius at z0: the largest r along `direction`
     with  σ_min(A − (z0 + r·direction)I) < eps.
 
@@ -232,7 +248,8 @@ def pseudospectrum_radius(A, eps, z0=0.0, N=None, rmatvec=None, direction=1.0,
     return float(lo)
 
 
-def pseudospectrum(A, zs, eps, N=None, rmatvec=None, k=96):
+def pseudospectrum(A, zs, eps: float, N: int | None = None,
+                   rmatvec: Callable | None = None, k: int = 96) -> np.ndarray:
     """Boolean mask of the ε-pseudospectrum  Λ_ε = { z : σ_min(A − zI) < eps }
     over an array of complex grid points zs."""
     zs = np.asarray(zs)
@@ -240,18 +257,18 @@ def pseudospectrum(A, zs, eps, N=None, rmatvec=None, k=96):
                      for z in zs.ravel()]).reshape(zs.shape)
 
 
-def defect_jump(D_n, J, n):
+def defect_jump(D_n, J, n: int) -> np.ndarray:
     """The exact defect-jump  D_{2n} = J^n · D_n  for a linear iteration matrix J
     (or matvec).  Predicts the next-doubling defect without running the iteration.
     """
     mv = J if callable(J) else (lambda x, J=J: J @ x)
-    x = np.asarray(D_n, float)
+    x = np.asarray(D_n)
     for _ in range(n):
         x = mv(x)
     return x
 
 
-def generator_read(P_n, P_2n, t, n, solver="be"):
+def generator_read(P_n, P_2n, t: float, n: int, solver: str = "be") -> np.ndarray:
     """Read the GENERATOR term a one-step solver already computed and threw
     away: for backward Euler,  D_n = P_n − P_2n = (t²/4n)·A²e^{−tA}u₀ + O(n⁻²),
     so  (4n/t²)·D_n  estimates the Koopman-generator observable A²e^{−tA}u₀ —
@@ -276,11 +293,14 @@ def generator_read(P_n, P_2n, t, n, solver="be"):
             f"solver={solver!r}: the defect constant is solver-specific; this "
             "read is verified for backward Euler only (Crank–Nicolson deviates "
             "O(1), measured rel. dev. ~1.0 — FA/revise_stress)")
+    if t == 0:
+        raise ValueError("generator_read needs t>0")
     D = np.asarray(P_n) - np.asarray(P_2n)
     return (4.0 * n / t ** 2) * D
 
 
-def generator_read_converged(P_n, P_2n, P_4n, t, n, solver="be"):
+def generator_read_converged(P_n, P_2n, P_4n, t: float, n: int,
+                             solver: str = "be") -> tuple[np.ndarray, float]:
     """`generator_read` with its own CONVERGENCE CHECK — the Richardson line
     the plain read tells you to write, written.
 
@@ -307,7 +327,7 @@ def generator_read_converged(P_n, P_2n, P_4n, t, n, solver="be"):
     return 2.0 * np.asarray(G_2n) - np.asarray(G_n), rel_dev
 
 
-def defect_barycentres(power, bands, coords=None):
+def defect_barycentres(power, bands, coords=None) -> tuple[np.ndarray, np.ndarray]:
     """COMPRESS each band of a defect power distribution to ONE coordinate —
     its energy barycentre (the BDS read).  One (location, amplitude) pair per
     band — that compression is exactly what survives noise where ratio

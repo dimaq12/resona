@@ -11,11 +11,13 @@ The flow is LINEAR in the lifted coordinate: R_{μ_t}(w) = R_{μ_0}(w) + t·w �
 shock lives only in the density G, never in the R-transform ("a shock is a sum of
 linearities").  Two atoms ±1 merge into one band at the critical time t_c = 1.
 """
+from __future__ import annotations
+
 import numpy as np
 from . import subordination as _sub
 
 
-def burgers_density(spectral, t, xs, eta=1e-3, g0=None):
+def burgers_density(spectral, t: float, xs, eta: float = 1e-3, g0=None) -> np.ndarray:
     """Density of the free-heat-flowed measure μ_t = μ_0 ⊞ semicircle(t), on xs.
 
     (t is the semicircle VARIANCE; equivalently A + √t·GOE.)  A shock = band edge.
@@ -25,7 +27,7 @@ def burgers_density(spectral, t, xs, eta=1e-3, g0=None):
     return _sub.averaged_dos(spectral, np.sqrt(max(t, 0.0)), xs, eta=eta, g0=g0)
 
 
-def shock_time(spectral, t_max=4.0, eta=2e-3):
+def shock_time(spectral, t_max: float = 4.0, eta: float = 2e-3) -> float | None:
     """The band-merger / shock time t_c: the smallest t at which the spectral gap
     fills in under the free heat flow (two bands → one).  Returns t_c or None.
 
@@ -33,6 +35,12 @@ def shock_time(spectral, t_max=4.0, eta=2e-3):
     broadening (smaller = sharper gap detection, slower fixed point).  Grid
     resolution and the fill threshold are internal (160 × 400, 2% of peak):
     knobs nobody should have had to turn.
+
+    MIDPOINT LIMITATION: the gap is probed at the ARITHMETIC midpoint
+    mid = ½(min+max) of the support.  This is exact only when the gap sits there
+    — i.e. for two equal-weight atoms (the symmetric ±a case).  For asymmetric /
+    unequal-weight spectra the true gap is off-centre and this probe can miss it
+    (read None when a merger did occur, or detect the wrong band).
     """
     n_t, n_x, thresh = 160, 400, 0.02
     nodes, _ = _sub._nw(spectral)

@@ -17,7 +17,14 @@ And one BRIDGE: `koopman` — data → operator (the data-driven Carleman): a
 trajectory matrix becomes the ACTION of its own propagator, so the whole
 library's spectral reads land on dynamics data.
 """
+from __future__ import annotations
+
+from typing import Callable, Sequence, Union
+
 import numpy as np
+
+Spectrum = Union["object", tuple]
+ArrayLike = Union[float, Sequence[float], np.ndarray]
 
 
 def _nw(s):
@@ -27,17 +34,20 @@ def _nw(s):
     return np.asarray(nodes, float), np.asarray(weights, float)
 
 
-def cauchy(s, z):
+def cauchy(s: Spectrum, z: complex) -> complex:
     """Stieltjes/Cauchy transform G(z) = Σ w_i/(z − λ_i) of a spectrum."""
     nodes, w = _nw(s); w = w / w.sum()
     return np.sum(w / (z - nodes))
 
 
-def r_transform(s, w):
+def r_transform(s: Spectrum, w: ArrayLike, tol: float = 1e-7) -> Union[float, np.ndarray]:
     """R-transform R(w) = G⁻¹(w) − 1/w (scalar or array w>0). R_{A⊞B}=R_A+R_B.
 
-    Vectorized bisection on the monotone G (110 halvings → tighter than brentq),
-    all query points solved at once.
+    Vectorized bisection on the monotone G (55 halvings → machine-tight for
+    float64), all query points solved at once.  After the bisection the root
+    residual |G(z*) − w| is checked against `tol·max(1,|w|)`; a target that no
+    z* in the domain (z > λmax) can realize raises ValueError instead of
+    silently returning a bracket endpoint.
 
     PRECISION NOTE: the root z* ≈ 1/w is found in absolute coordinates and
     1/w subtracted — for w ≪ 1 this cancels ~|log₁₀ w| digits (R(1e-10)
@@ -58,35 +68,50 @@ def r_transform(s, w):
             if not mask.any():
                 break
             hi[mask] = lam + (hi[mask] - lam) * 2.0 + 1.0
-        for _ in range(110):                                # bisection, machine-tight
+        for _ in range(55):                                 # bisection, machine-tight
             mid = 0.5 * (lo + hi)
             high = G(mid) > wp                              # root right of mid
             lo = np.where(high, mid, lo)
             hi = np.where(high, hi, mid)
-        out[pos] = 0.5 * (lo + hi) - 1.0 / wp
+        mid = 0.5 * (lo + hi)
+        if np.any(np.abs(G(mid) - wp) > tol * np.maximum(1.0, np.abs(wp))):
+            raise ValueError("r_transform: target out of achievable range "
+                             "(no z > λmax realizes this w)")
+        out[pos] = mid - 1.0 / wp
     return float(out[0]) if np.isscalar(w) else out
 
 
-def s_transform(s, w):
+def s_transform(s: Spectrum, w: ArrayLike, tol: float = 1e-7) -> Union[float, np.ndarray]:
     """S-transform (positive spectrum). S_{A⊠B}=S_A·S_B. scalar or array w>0.
 
-    Vectorized bisection on the monotone ψ (110 halvings → tighter than brentq)."""
+    Vectorized bisection on the monotone ψ (55 halvings → machine-tight for
+    float64).  The bracket (lo, hi) hugs the pole at z = 1/λmax RELATIVELY
+    (lo = inv·1e-12, hi = inv·(1−1e-12)) so it never inverts even when λmax is
+    huge (inv ≈ 1e-13); the old absolute `inv − 1e-12` flipped lo>hi once
+    1/λmax ≤ 1e-12 and returned a silent 2×-wrong answer.  After bisection the
+    residual |ψ(z*) − w| is checked against `tol·max(1,|w|)`; an unreachable
+    target raises ValueError instead of returning a wrong value."""
     nodes, wt = _nw(s); wt = wt / wt.sum(); inv = 1.0 / float(nodes.max())
     wq = np.atleast_1d(np.asarray(w, float))
     psi = lambda z: (wt[None, :] * nodes[None, :] * z[:, None]
                      / (1 - nodes[None, :] * z[:, None])).sum(1)
-    lo = np.full(len(wq), 1e-12)
-    hi = np.full(len(wq), inv - 1e-12)
-    for _ in range(110):                                    # ψ: 0→∞ on (0, 1/λmax)
+    lo = np.full(len(wq), inv * 1e-12)
+    hi = np.full(len(wq), inv * (1 - 1e-12))
+    assert np.all(hi > lo), "s_transform: degenerate bracket (λmax ≤ 0?)"
+    for _ in range(55):                                     # ψ: 0→∞ on (0, 1/λmax)
         mid = 0.5 * (lo + hi)
         low = psi(mid) < wq
         lo = np.where(low, mid, lo)
         hi = np.where(low, hi, mid)
-    out = (1 + wq) / wq * (0.5 * (lo + hi))
+    mid = 0.5 * (lo + hi)
+    if np.any(np.abs(psi(mid) - wq) > tol * np.maximum(1.0, np.abs(wq))):
+        raise ValueError("s_transform: target out of achievable range")
+    out = (1 + wq) / wq * mid
     return float(out[0]) if np.isscalar(w) else out
 
 
-def r_inverse(s, value, w_max=1.0, n=2001):
+def r_inverse(s: Spectrum, value: ArrayLike, w_max: float = 1.0,
+              n: int = 2001) -> Union[float, np.ndarray]:
     """w such that R(w) = value — the dual of `r_transform`, for spectral
     DESIGN (choose the coordinate w that realizes a target R).  Scalar or
     array `value`.
@@ -101,7 +126,8 @@ def r_inverse(s, value, w_max=1.0, n=2001):
                             "R", w_max)
 
 
-def s_inverse(s, value, w_max=1.0, n=2001):
+def s_inverse(s: Spectrum, value: ArrayLike, w_max: float = 1.0,
+              n: int = 2001) -> Union[float, np.ndarray]:
     """w such that S(w) = value — the dual of `s_transform` (positive
     spectra), same contract as `r_inverse`."""
     ws = np.linspace(w_max / n, w_max, n)
@@ -132,7 +158,7 @@ def _monotone_invert(fn, ws, rs, value, name, w_max):
     return float(out[0]) if np.isscalar(value) else out
 
 
-def free_convolution(sA, sB, order=6):
+def free_convolution(sA: Spectrum, sB: Spectrum, order: int = 6) -> np.ndarray:
     """Moments of  A ⊞ B  (free additive convolution) from the two spectra ALONE.
 
     Composition linearizes in the free cumulants: κ_n(A⊞B) = κ_n(A) + κ_n(B).  So
@@ -153,12 +179,18 @@ def free_convolution(sA, sB, order=6):
     return moments_from_cumulants(kAB)
 
 
-def carleman_scalar(coeffs, order):
+def carleman_scalar(coeffs: ArrayLike, order: int) -> np.ndarray:
     """Carleman matrix M of the scalar polynomial ODE  ẋ = Σ_k coeffs[k]·xᵏ.
 
-    On z = (x¹, …, x^order):  ż_j = j·Σ_k c_k x^{j-1+k} = Σ_k c_k·j·z_{j-1+k}
+    Basis z = (x⁰, x¹, …, x^order) — index j IS the exponent (an (order+1)²
+    matrix).  The CONSTANT coordinate z_0 = 1 is carried so the constant term
+    c_0·x⁰ of the field is not lost:  ż_0 = 0 (row 0 is zero) and for j ≥ 1
+        ż_j = j·xʲ⁻¹·ẋ = j·Σ_k c_k x^{j-1+k} = Σ_k c_k·j·z_{j-1+k}
     (truncated at `order`).  Evolve x(t) by  exp(tM)·z0  (resona.apply,
-    hermitian=False), reading x = z_1.
+    hermitian=False) with z0 = (x⁰, …, x^order), reading **x = z_1** (index 1).
+
+    The earlier basis (x¹…x^order) dropped c_0 (col 0 fell under a `1≤col`
+    guard), so ż_1 silently lost its constant term; the augmented basis fixes it.
 
     The truncation is exact only as the order →∞; in practice use it as a small-
     STEP integrator — re-lift z0 = (x^j) from the current x each step dt and take
@@ -167,16 +199,17 @@ def carleman_scalar(coeffs, order):
     precision (a Carleman/ETD scheme).
     """
     c = np.asarray(coeffs, float)
-    M = np.zeros((order, order))
-    for j in range(1, order + 1):                           # row z_j (index j-1)
+    M = np.zeros((order + 1, order + 1))
+    for j in range(1, order + 1):                           # row z_j (index j = exponent)
         for k, ck in enumerate(c):
-            col = j - 1 + k                                 # z_{j-1+k} (index col-1)
-            if 1 <= col <= order and ck != 0.0:
-                M[j - 1, col - 1] += ck * j
+            col = j - 1 + k                                 # z_{j-1+k}, index = exponent
+            if 0 <= col <= order and ck != 0.0:
+                M[j, col] += ck * j
     return M
 
 
-def conserved_charge(H, basis, tol=1e-7):
+def conserved_charge(H: np.ndarray, basis: Sequence[np.ndarray],
+                     tol: float = 1e-7) -> tuple:
     """BLIND search for (quasi-)conserved charges: over the span of candidate
     operators {O_a}, find the Q that most nearly commutes with H.
 
@@ -236,7 +269,7 @@ def _gf_solve(V, y, p):
     return A[:, -1] % p
 
 
-def carleman_gf(p, n, func):
+def carleman_gf(p: int, n: int, func: Callable) -> tuple:
     """Exact GF(p) Carleman lift of ANY logic map f:{0..p-1}ⁿ→{0..p-1}.
 
     Since x^p ≡ x (mod p), the monomial basis has exponents in {0..p-1}ⁿ; the
@@ -260,7 +293,8 @@ def carleman_gf(p, n, func):
     return coeffs, evaluate
 
 
-def koopman(snapshots, rank=None, rtol=1e-10):
+def koopman(snapshots: np.ndarray, rank: int | None = None,
+            rtol: float = 1e-10) -> tuple:
     """DATA → OPERATOR: the action of the Koopman/DMD propagator, never formed.
 
     `snapshots`: (n_features, n_times) trajectory matrix of a dynamical

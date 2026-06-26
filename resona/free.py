@@ -19,6 +19,11 @@ vanishing of MIXED cumulants, equivalently of alternating CENTERED moments
 (O(1/√N)) for a free pair, O(1) otherwise.  And the CROSS-moments τ(AB…) are the
 orientation information the spectrum alone discards (Horn's obstruction).
 """
+from __future__ import annotations
+
+import warnings
+from typing import Callable, Mapping, Sequence
+
 import numpy as np
 
 
@@ -39,7 +44,7 @@ def _trunc_pow(a, n, N):
     return r
 
 
-def free_cumulants(moments):
+def free_cumulants(moments: Sequence[float]) -> list[float]:
     """Free cumulants κ_1..κ_N from moments m_1..m_N.
 
     Solves the non-crossing functional equation M(z) = 1 + Σ κ_n zⁿ M(z)ⁿ order by
@@ -56,7 +61,7 @@ def free_cumulants(moments):
     return kappa[1:]
 
 
-def moments_from_cumulants(kappa):
+def moments_from_cumulants(kappa: Sequence[float]) -> list[float]:
     """Inverse of free_cumulants: moments m_1..m_N from free cumulants κ.
 
     Solves M(z) = 1 + Σ κ_n zⁿ M(z)ⁿ order by order — the other direction of the
@@ -81,7 +86,8 @@ def _htrace(matvec, N, probes, rng):
     return acc / probes
 
 
-def freeness_defect(Amv, Bmv, N, word="ABAB", probes=24, seed=0):
+def freeness_defect(Amv: Callable, Bmv: Callable, N: int, word: str = "ABAB",
+                    probes: int = 24, seed: int = 0) -> float:
     """|τ(Å B̊ Å …)| for the alternating centered word — the freeness criterion.
 
     ≈0 (O(1/√N)) ⇔ A and B are free ⇔ their response composes exactly; O(1) marks
@@ -104,7 +110,8 @@ def freeness_defect(Amv, Bmv, N, word="ABAB", probes=24, seed=0):
     return abs(_htrace(wordmv, N, probes, rng) / N)
 
 
-def cross_moment(matvecs, word, N, probes=24, seed=0, normalize=True):
+def cross_moment(matvecs: Mapping[str, Callable], word: str, N: int,
+                 probes: int = 24, seed: int = 0, normalize: bool = True) -> float:
     """τ(word) = Tr(word)/N for a word in operators, e.g. word='AB' with
     matvecs={'A':..,'B':..} — the orientation info the spectrum discards."""
     rng = np.random.default_rng(seed)
@@ -124,7 +131,7 @@ def _stieltjes_at(eigs, points, eta):
     return (1.0 / (z[:, None] - eigs[None, :])).mean(axis=1)
 
 
-def rie_clean(eigenvalues, q, eta=None):
+def rie_clean(eigenvalues: Sequence[float], q: float, eta: float | None = None) -> np.ndarray:
     """FREE DECONVOLUTION of a sample covariance: the rotationally-invariant
     estimator (Ledoit–Péché / Bun–Bouchaud–Potters).
 
@@ -156,7 +163,8 @@ def rie_clean(eigenvalues, q, eta=None):
     return lam / np.abs(1.0 - q + q * lam * g) ** 2
 
 
-def rie_clean_additive(eigenvalues, sigma, eta=None):
+def rie_clean_additive(eigenvalues: Sequence[float], sigma: float,
+                       eta: float | None = None) -> np.ndarray:
     """FREE DECONVOLUTION of additive noise:  E = A + σ·(GOE-like W).
 
     The optimal rotation-invariant cleaning of the eigenvalues,
@@ -171,4 +179,12 @@ def rie_clean_additive(eigenvalues, sigma, eta=None):
     if eta is None:
         eta = 1.0 / np.sqrt(len(lam))
     g = _stieltjes_at(lam, lam, eta)
-    return lam - 2.0 * sigma ** 2 * np.real(g)
+    xi = lam - 2.0 * sigma ** 2 * np.real(g)
+    if np.any(xi < 0.0) and np.all(lam >= 0.0):
+        warnings.warn(
+            "rie_clean_additive: cleaning drove eigenvalue(s) negative — the "
+            "additive model (E = A + σ·W) has broken down, likely σ too large "
+            "for this spectrum.  Treat the negative cleaned values as unreliable.",
+            stacklevel=2,
+        )
+    return xi

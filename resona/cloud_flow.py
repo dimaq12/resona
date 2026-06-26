@@ -37,6 +37,8 @@ and ALWAYS report the two-sided residuals ‖A v − λ v‖ and ‖u^H A − λ
 Near an EP the biorthogonal formula legitimately diverges — that is the read,
 not an error.
 """
+from __future__ import annotations
+
 import numpy as np
 
 __all__ = [
@@ -77,8 +79,8 @@ def _match_targets(vals, targets):
     return np.array(idx, int)
 
 
-def biorthogonal_eigs(A0, Bs, targets, k=None, matrix_free=False, sigma=None,
-                      tol=0.0):
+def biorthogonal_eigs(A0, Bs, targets, k=None, matrix_free: bool = False,
+                      sigma=None, tol: float = 0.0) -> dict:
     """LEFT and RIGHT eigenvectors of A(k) for the eigenvalues nearest each
     target value, with two-sided residuals.
 
@@ -105,6 +107,13 @@ def biorthogonal_eigs(A0, Bs, targets, k=None, matrix_free=False, sigma=None,
     if k is None:
         k = np.zeros(len(Bs))
     k = np.asarray(k, float)
+
+    # ARPACK shift-invert needs 1 ≤ nev ≤ N−1 (here nev ≥ 1 only if N ≥ 3); at
+    # N < 3 it cannot run, so fall back to the exact dense path (no information
+    # lost — dense eig IS the ground truth at this size).
+    n0 = A0.shape[0]
+    if matrix_free and n0 < 3:
+        matrix_free = False
 
     if not matrix_free:
         A = _build(A0, Bs, k)
@@ -162,8 +171,8 @@ def biorthogonal_eigs(A0, Bs, targets, k=None, matrix_free=False, sigma=None,
 # ──────────────────────────────────────────────────────────────────────────
 # 1. the biorthogonal spectral Jacobian
 # ──────────────────────────────────────────────────────────────────────────
-def cloud_wkernel(A0, Bs, targets, k=None, matrix_free=False, sigma=None,
-                  return_pairs=False):
+def cloud_wkernel(A0, Bs, targets, k=None, matrix_free: bool = False,
+                  sigma=None, return_pairs: bool = False):
     """W[i,j] = (u_i^* B_j v_i) / (u_i^* v_i) = ∂λ_i/∂k_j — the NON-HERMITIAN
     spectral Jacobian for the targeted COMPLEX eigenvalues of
     A(k) = A0 + Σ_j k_j B_j.
@@ -200,8 +209,8 @@ def cloud_wkernel(A0, Bs, targets, k=None, matrix_free=False, sigma=None,
 # ──────────────────────────────────────────────────────────────────────────
 # 2. complex eigenvalue continuation
 # ──────────────────────────────────────────────────────────────────────────
-def cloud_track(A0, Bs, path, modes, matrix_free=False, sigma=None,
-                return_rigidity=False):
+def cloud_track(A0, Bs, path, modes, matrix_free: bool = False, sigma=None,
+                return_rigidity: bool = False):
     """Follow chosen COMPLEX eigenvalues λ(k) along a parameter path — the
     non-Hermitian analogue of `resona.wkernel.track`.
 
@@ -245,7 +254,8 @@ def cloud_track(A0, Bs, path, modes, matrix_free=False, sigma=None,
 # ──────────────────────────────────────────────────────────────────────────
 # 3. phase rigidity & exceptional-point detector
 # ──────────────────────────────────────────────────────────────────────────
-def phase_rigidity(A0, Bs, targets, k=None, matrix_free=False, sigma=None):
+def phase_rigidity(A0, Bs, targets, k=None, matrix_free: bool = False,
+                   sigma=None) -> dict:
     """The PHASE RIGIDITY r_i = |u_i^* v_i| / (‖u_i‖ ‖v_i‖) of the targeted
     eigenvalues — the EP proximity gauge.
 
@@ -263,8 +273,8 @@ def phase_rigidity(A0, Bs, targets, k=None, matrix_free=False, sigma=None):
     return info
 
 
-def exceptional_point(A0, Bs, bracket, target_pair, n_scan=201,
-                      refine=True):
+def exceptional_point(A0, Bs, bracket, target_pair, n_scan: int = 201,
+                      refine: bool = True) -> dict:
     """Locate an EXCEPTIONAL POINT along a ONE-parameter scan, matrix-free in
     the read: scan k over `bracket`, track the two coalescing eigenvalues, and
     find where the phase rigidity |u^* v| is minimal (eigenvectors coalesce).
@@ -284,16 +294,19 @@ def exceptional_point(A0, Bs, bracket, target_pair, n_scan=201,
     klo, khi = bracket
     M = len(Bs)
 
-    def _rig_and_gap(k0):
+    def _rig_and_gap(k0, pair):
+        # match against `pair` — the LOCALLY-continued eigenvalues, not the
+        # original target_pair (which has drifted far from the EP).
         k = np.zeros(M)
         k[0] = k0
-        info = biorthogonal_eigs(A0, Bs, target_pair, k=k)
+        info = biorthogonal_eigs(A0, Bs, pair, k=k)
         return float(np.min(np.abs(info["denom"]))), \
             float(np.abs(info["vals"][0] - info["vals"][1])), info["vals"]
 
     ks = np.linspace(klo, khi, n_scan)
     rigs = np.empty(n_scan)
     gaps = np.empty(n_scan)
+    vals_scan = [None] * n_scan             # the CONTINUED pair at each scan point
     last = np.atleast_1d(np.asarray(target_pair, complex))
     for i, k0 in enumerate(ks):
         k = np.zeros(M); k[0] = k0
@@ -301,6 +314,7 @@ def exceptional_point(A0, Bs, bracket, target_pair, n_scan=201,
         rigs[i] = float(np.min(np.abs(info["denom"])))
         gaps[i] = float(np.abs(info["vals"][0] - info["vals"][1]))
         last = info["vals"]                 # continuation along the scan
+        vals_scan[i] = last
 
     i0 = int(np.argmin(rigs))
     k_ep = ks[i0]
@@ -308,12 +322,14 @@ def exceptional_point(A0, Bs, bracket, target_pair, n_scan=201,
     gap_min = gaps.min()
 
     if refine and 0 < i0 < n_scan - 1:
-        # golden-section on rigidity over the neighbouring bracket
+        # golden-section on rigidity over the neighbouring bracket, matching
+        # against the locally-continued pair at the coarse minimum (NOT the
+        # stale target_pair: that is the bug the dead `cur = last` hinted at).
         a, b = ks[i0 - 1], ks[i0 + 1]
         gr = (np.sqrt(5) - 1) / 2
-        cur = last
+        pair0 = vals_scan[i0]
         def f(k0):
-            return _rig_and_gap(k0)[0]
+            return _rig_and_gap(k0, pair0)[0]
         c = b - gr * (b - a)
         d = a + gr * (b - a)
         fc, fd = f(c), f(d)
@@ -329,7 +345,7 @@ def exceptional_point(A0, Bs, bracket, target_pair, n_scan=201,
             if abs(b - a) < 1e-12:
                 break
         k_ep = 0.5 * (a + b)
-        rig_min, gap_min, _ = _rig_and_gap(k_ep)
+        rig_min, gap_min, _ = _rig_and_gap(k_ep, pair0)
 
     return dict(k_ep=float(k_ep), rig_min=float(rig_min), gap_min=float(gap_min),
                 k_scan=ks, rig_scan=rigs, gap_scan=gaps)

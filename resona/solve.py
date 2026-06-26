@@ -24,13 +24,17 @@ float64, the cluster's conditioning a^{-(q-1)} has already destroyed the
 information — no method recovers it; the result is then capped by the data
 (returned honestly, compare against `naive`).  It does not beat Abel–Ruffini.
 """
+from __future__ import annotations
+
 from fractions import Fraction
+from typing import Callable, Sequence
+
 import numpy as np
 
 __all__ = ["exact_poly", "catastrophe_solve", "rayleigh_polish"]
 
 
-def exact_poly(roots):
+def exact_poly(roots: Sequence) -> list[Fraction]:
     """Exact (Fraction) coefficients, highest-first, of ∏(x − root).
 
     Accepts ints / Fractions (exact in → exact out) or floats (exact in the
@@ -46,7 +50,8 @@ def exact_poly(roots):
     return c
 
 
-def catastrophe_solve(coeffs_exact, target_digits=15, cluster_tol=0.1):
+def catastrophe_solve(coeffs_exact: Sequence, target_digits: int = 15,
+                      cluster_tol: float = 0.1) -> tuple[np.ndarray, int, int, np.ndarray]:
     """Solve a polynomial with a root CLUSTER to full precision, auto-budgeted.
 
     coeffs_exact : highest-first EXACT coefficients (fractions.Fraction / int).
@@ -75,7 +80,9 @@ def catastrophe_solve(coeffs_exact, target_digits=15, cluster_tol=0.1):
         mp.mp.dps = old
 
 
-def rayleigh_polish(A, sigma, N=None, iters=6, v0=None, seed=0, tol=0.0):
+def rayleigh_polish(A, sigma: float, N: int | None = None, iters: int = 6,
+                    v0=None, seed: int = 0, tol: float = 0.0,
+                    symmetric: bool = True) -> float:
     """Polish ONE eigenvalue near the shift `sigma` to machine precision.
 
     (`sigma` is the SHIFT — a Ritz seed near the target eigenvalue, in the
@@ -84,6 +91,14 @@ def rayleigh_polish(A, sigma, N=None, iters=6, v0=None, seed=0, tol=0.0):
     Shifted inverse iteration with Rayleigh-quotient updates — cubic convergence
     for symmetric operators.  `A` is a dense/sparse matrix OR a matvec callable
     (then pass N).  Seed `sigma` from `resona.of(...).nodes` (the Ritz values).
+
+    `symmetric` (matrix-free path only): True (default) uses MINRES, valid for
+    SYMMETRIC/Hermitian operators — its byte-identical legacy behavior.  Set
+    False for a NON-symmetric operator: the inner shifted solve then uses LGMRES
+    (MINRES would silently return garbage on a non-symmetric operator).  Note the
+    one-sided Rayleigh quotient λ = v·A·v is symmetric-only by design; for the
+    non-symmetric case it returns a (still useful) one-sided quotient that lands
+    near a true eigenvalue but is not the two-sided Rayleigh quotient.
 
     Returns the polished eigenvalue λ (float).  This is the sft35 pipeline's
     polish step as a primitive: resona supplies the matrix-free seed, this
@@ -110,13 +125,18 @@ def rayleigh_polish(A, sigma, N=None, iters=6, v0=None, seed=0, tol=0.0):
             except np.linalg.LinAlgError:
                 break                                       # exactly singular: converged
         else:
-            from scipy.sparse.linalg import LinearOperator, minres
+            from scipy.sparse.linalg import LinearOperator, minres, lgmres
             op = LinearOperator((N, N), matvec=lambda x: mv(x) - lam * x)
-            v_new, info = minres(op, v, rtol=1e-12, maxiter=4 * N)
+            if symmetric:
+                v_new, solve_info = minres(op, v, rtol=1e-12, maxiter=4 * N)
+            else:
+                # MINRES is symmetric-only; a non-symmetric shifted operator
+                # needs a general (non-symmetric) Krylov solver.
+                v_new, solve_info = lgmres(op, v, rtol=1e-12, maxiter=4 * N)
             # inverse iteration tolerates a rough solve (only the DIRECTION matters),
-            # so info>0 (maxiter) is fine — but a breakdown (info<0) or a null /
-            # non-finite vector is garbage: stop and keep the last good lam.
-            if info < 0 or not np.any(v_new) or not np.all(np.isfinite(v_new)):
+            # so solve_info>0 (maxiter) is fine — but a breakdown (solve_info<0) or a
+            # null / non-finite vector is garbage: stop and keep the last good lam.
+            if solve_info < 0 or not np.any(v_new) or not np.all(np.isfinite(v_new)):
                 break
             v = v_new
         v = v / np.linalg.norm(v)

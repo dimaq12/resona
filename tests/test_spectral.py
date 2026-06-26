@@ -249,3 +249,92 @@ def test_error_bars_need_probes():
     import pytest as _pt
     with _pt.raises(ValueError):
         s.trace(np.log, with_err=True)
+
+
+# ── composition by matmul (sA @ sB) ──
+
+def test_compose_matmul_commuting():
+    """sA @ sB for COMMUTING operators: A @ (A @ v) = A² — extreme vs dense."""
+    N = 400
+    A = _sym(N)
+    sA = Spectral.of(lambda v: A @ v, N, k=80, probes=4)
+    sA2 = Spectral.of(lambda v: A @ (A @ v), N, k=80, probes=4)
+    # sA @ sA = Spectral for A·A = A² — same as sA2 since A commutes with itself
+    s_composed = sA @ sA
+    lo, hi = s_composed.extreme()
+    ev = np.sort(linalg.eigvalsh(A @ A))
+    rel_tol = 0.04 * (ev[-1] - ev[0])
+    assert abs(hi - ev[-1]) < rel_tol
+    assert abs(lo - ev[0]) < rel_tol
+    # trace of A² from composed object
+    true = float(np.trace(A @ A))
+    est = s_composed.moment(1)
+    assert abs(est - true) < 0.15 * abs(true)
+
+
+# ── reprobe = pushforward ──
+
+def test_reprobe_shift():
+    """reprobe: f(A) = A + c·I — pushforward spectrum matches dense shift."""
+    N = 400; c = 2.5
+    A = _sym(N)
+    sA = Spectral.of(lambda v: A @ v, N, k=80, probes=4)
+    s_shift = sA.reprobe(lambda v: A @ v + c * v)
+    lo, hi = s_shift.extreme()
+    ev = np.sort(linalg.eigvalsh(A + c * np.eye(N)))
+    rel_tol = 0.04 * (ev[-1] - ev[0])
+    assert abs(lo - ev[0]) < rel_tol
+    assert abs(hi - ev[-1]) < rel_tol
+
+
+def test_reprobe_power():
+    """reprobe: f(A) = A² — trace matches dense trace of A²."""
+    N = 300
+    A = _sym(N)
+    sA = Spectral.of(lambda v: A @ v, N, k=60, probes=8)
+    s_sq = sA.reprobe(lambda v: A @ (A @ v))
+    true = float(np.trace(A @ A))
+    est = s_sq.moment(1)
+    assert abs(est - true) < 0.15 * abs(true)
+
+
+def test_reprobe_inverse():
+    """reprobe: f(A) = (A + I)^{-1} — trace matches dense."""
+    N = 200
+    A = rng.standard_normal((N, N)); A = A @ A.T / N + 1.5 * np.eye(N)  # PSD
+    A_plus_I = A + np.eye(N)
+    sA = Spectral.of(lambda v: A @ v, N, k=48, probes=4)
+    s_inv = sA.reprobe(lambda v: np.linalg.solve(A_plus_I, v))
+    true_inv_trace = float(np.trace(np.linalg.inv(A_plus_I)))
+    est = s_inv.trace(lambda x: x)
+    assert abs(est - true_inv_trace) / abs(true_inv_trace) < 0.10
+
+
+def test_reprobe_alias_apply():
+    """Spectral.apply is an alias for reprobe — both produce identical result."""
+    N = 200
+    A = _sym(N)
+    sA = Spectral.of(lambda v: A @ v, N, k=60, probes=4)
+    s1 = sA.reprobe(lambda v: A @ (A @ v))
+    s2 = sA.apply(lambda v: A @ (A @ v))
+    m1 = s1.moment(1)
+    m2 = s2.moment(1)
+    assert abs(m1 - m2) < 1e-12
+
+
+# ── flow method on Spectral object ──
+
+def test_spectral_flow_method():
+    """Spectral.flow(…) delegates to burgers_density — end-to-end chain."""
+    N = 400
+    A = _sym(N)
+    s = Spectral.of(lambda v: A @ v, N, k=60, probes=4)
+    lo, hi = s.extreme()
+    pad = 2.0
+    xs = np.linspace(lo - pad, hi + pad, 400)
+    rho = s.flow(0.5, xs)
+    assert np.all(rho >= -1e-10)
+    # mass ≈ 1 on the padded support
+    assert abs(np.trapezoid(rho, xs) - 1.0) < 0.08
+    tc = s.shock_time()
+    assert tc is None or tc > 0

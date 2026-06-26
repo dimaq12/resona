@@ -19,7 +19,15 @@ Everything else is read off the same object:
     s.effective_rank() ; s.condition()              # the honest cost dials
 """
 from __future__ import annotations
+import warnings
+from typing import Any, Callable, Optional, Sequence, Tuple, Union
 import numpy as np
+
+# `from __future__ import annotations` makes every annotation below a string —
+# they are never evaluated at runtime, so these aliases are documentation only.
+Operator = Any                                    # callable matvec / LinearOperator / sparse / dense
+Func = Union[Callable[[np.ndarray], np.ndarray], str]   # callable or family name ('log', ...)
+ArrayLike = Any                                   # ndarray / device array / sequence
 
 __all__ = ["Spectral", "apply", "quadform", "local_spectrum", "local_density", "from_measure", "from_eigenbasis"]
 
@@ -521,8 +529,9 @@ def _apply_xp(matvec, f, v, k, hermitian, xp):
         theta, S = np.linalg.eigh(T)
         # complex f on a real spectrum (e^{-iHt}) is fine when v or A is
         # complex — exactly the host contract; the real path casts to float
-        fth = np.asarray(f(theta)) if xp.iscomplex(v) \
-            else np.asarray(f(theta), float)
+        fth = np.asarray(f(theta))
+        if not np.iscomplexobj(fth):     # complex f (e^{-iHt}) stays complex;
+            fth = fth.astype(float)      # real f casts to float (bit-for-bit)
         y = S @ (fth * S[0, :])
         return nv * (V[:m, :].T @ xp.asarray(y, like=v))
     v = xp.as_complex(v)                         # ── Arnoldi (general) ──
@@ -634,7 +643,9 @@ def _as_operator(A, N=None):
     return mv, n
 
 
-def quadform(matvec, f, v, k: int = 48, certified: bool = False, support=None):
+def quadform(matvec: Operator, f: Func, v: ArrayLike, k: int = 48,
+             certified: bool = False,
+             support: Optional[Tuple[float, Optional[float]]] = None):
     """vᵀ f(A) v — the quadratic-form read (one Lanczos from v, matrix-free).
 
     `matvec` may be a callable, a scipy LinearOperator, a sparse matrix, or a
@@ -674,7 +685,9 @@ class Spectral:
     quadrature.  Carries an optional matvec so compositions stay matrix-free.
     """
 
-    def __init__(self, nodes, weights, matvec=None, N=None, probe_sizes=None):
+    def __init__(self, nodes: ArrayLike, weights: ArrayLike,
+                 matvec: Operator = None, N: Optional[int] = None,
+                 probe_sizes: Optional[Sequence[int]] = None) -> None:
         self.nodes = np.asarray(nodes, float)
         self.weights = np.asarray(weights, float)
         self.matvec = matvec
@@ -686,7 +699,9 @@ class Spectral:
 
     # ── PROBE (forward transform) ────────────────────────────────────────────
     @classmethod
-    def of(cls, matvec, N=None, k=48, probes=8, seed=0, engine="lanczos", deflate=0):
+    def of(cls, matvec: Operator, N: Optional[int] = None, k: int = 48,
+           probes: int = 8, seed: int = 0, engine: str = "lanczos",
+           deflate: int = 0) -> "Spectral":
         """Harvest the response of the operator given by `matvec` (acts on R^N,
         or on C^N for a complex HERMITIAN operator — detected automatically;
         complex probes are used and the read side is unchanged).
@@ -729,6 +744,8 @@ class Spectral:
         usual accuracy (measured: a float64 torch matvec agrees with the numpy
         path to ~1e-12).  The numpy path itself is untouched, bit-identically.
         """
+        if k < 1:
+            raise ValueError("k must be >= 1")
         matvec, N = _as_operator(matvec, N)
         rng = np.random.default_rng(seed)
         is_c, xp, ref = _probe_operator(matvec, N)
@@ -850,7 +867,7 @@ class Spectral:
         return Spectral(nodes, weights, matvec=None, N=self.N)
 
     # ── READ (inverse transform: any spectral functional) ─────────────────────
-    def trace(self, f, with_err: bool = False):
+    def trace(self, f: Func, with_err: bool = False):
         """Tr f(A) = N · E[f(λ)] = N · Σ w·f(node).
 
         f may be a CALLABLE (``s.trace(np.log)``) or a family NAME
@@ -864,7 +881,12 @@ class Spectral:
         the old ``trace(certified=True)`` spelling is removed — one name
         per return shape).
         """
-        f, _ = _resolve_f(f)
+        f, fam = _resolve_f(f)
+        if fam in ("log", "sqrt") and self.nodes.size and float(self.nodes.min()) <= 0.0:
+            warnings.warn(
+                f"trace('{fam}'): the spectrum reaches <= 0 (min node "
+                f"{float(self.nodes.min()):.3g}) — {fam} is not real there, the "
+                "result will be NaN", RuntimeWarning, stacklevel=2)
         vals = self.weights * f(self.nodes)
         total = float(self.N) * float(np.sum(vals))
         if not with_err:
@@ -882,7 +904,9 @@ class Spectral:
         stderr = float(np.std(ests, ddof=1) / np.sqrt(p))
         return total, stderr
 
-    def trace_certified(self, f, support=None):
+    def trace_certified(self, f: Func,
+                        support: Optional[Tuple[float, Optional[float]]] = None
+                        ) -> Tuple[float, float]:
         """(lo, hi) — the Gauss–Radau bracket (Golub–Meurant) of Tr f(A)'s
         K-TRUNCATION error: the fully-converged SLQ value of these same
         probes provably lies inside.
@@ -927,7 +951,7 @@ class Spectral:
         used = int(np.sum(self.probe_sizes))
         return list(self.probe_sizes), len(self.nodes) - used
 
-    def density(self, xs, eta: float = 0.1, with_err: bool = False):
+    def density(self, xs: ArrayLike, eta: float = 0.1, with_err: bool = False):
         """Density of states ρ(x), Lorentzian-broadened by `eta`.
 
         ``with_err=True`` → (rho, stderr): the per-x standard error from the
@@ -1036,8 +1060,8 @@ class Spectral:
         from .flow import shock_time
         return shock_time(self, **kw)
 
-    def zoom(self, a, b, k: int = 48, probes: int = 8, degree: int = 200,
-             seed: int = 0) -> "Spectral":
+    def zoom(self, a: float, b: float, k: int = 48, probes: int = 8,
+             degree: int = 200, seed: int = 0) -> "Spectral":
         """The spectral measure INSIDE the window [a, b] — interior eigenvalues
         at full resolution, matrix-free (needs the carried matvec).
 
@@ -1079,12 +1103,14 @@ class Spectral:
         coef *= g / (degree + 1)                                  # Jackson kernel
         p_grid = np.polynomial.chebyshev.chebval(x, coef)         # the filter, exactly
         in_win = ind > 0
+        if not in_win.any():
+            raise ValueError("zoom window contains no spectrum")
         gain = float(np.mean(p_grid[in_win] ** 2))                # in-window p² mass
 
         Amv = self.matvec
         tilde = lambda v: (Amv(v) - c * v) / w_half               # map to [-1, 1]
         rng = np.random.default_rng(seed)
-        nodes, weights, sizes, tris = [], [], [], []
+        nodes, weights, sizes = [], [], []
         for _ in range(probes):
             v = rng.standard_normal(self.N)
             t0, t1 = v, tilde(v)
@@ -1099,14 +1125,17 @@ class Spectral:
             theta, S = np.linalg.eigh(T)
             nodes.append(theta)
             weights.append(S[0, :] ** 2 * (mass / gain) / probes)
-            sizes.append(len(theta)); tris.append((al, be))
+            sizes.append(len(theta))
         out = Spectral(np.concatenate(nodes), np.concatenate(weights),
                        self.matvec, self.N, probe_sizes=sizes)
-        out._tridiags = tris
+        # the filtered/reweighted window measure is NOT a unit-mass trace
+        # measure, so its (α, β) would make trace_certified emit a meaningless
+        # degenerate bracket (scale=1, n_atoms=0) — withhold them.
+        out._tridiags = None
         return out
 
     # ── CLOSURE (whole spectrum from a few numbers) ────────────────────────────
-    def levels(self, N: int = None):
+    def levels(self, N: Optional[int] = None):
         """All N eigenvalues from FOUR numbers — support + first two moments —
         via the maximum-entropy Beta closure (smooth/local operators).  O(N),
         two factors of N below dense diagonalization."""
@@ -1154,11 +1183,15 @@ class Spectral:
             raise ValueError("error bars need the probe structure from "
                              "Spectral.of with probes >= 2")
         p = len(self.probe_sizes)
+        used = int(np.sum(self.probe_sizes))             # deflate atoms (if any)
+        nd_at, wt_at = self.nodes[used:], self.weights[used:]   # live past the probes
+        m1_atom = float(self.N) * float(np.sum(wt_at * nd_at))  # exact, zero scatter —
+        m2_atom = float(self.N) * float(np.sum(wt_at * nd_at ** 2))  # added to every probe
         ests, i = [], 0
         for sz in self.probe_sizes:
             nd, wt = self.nodes[i:i + sz], self.weights[i:i + sz] * p
-            mm1 = float(self.N) * float(np.sum(wt * nd))
-            mm2 = float(self.N) * float(np.sum(wt * nd ** 2))
+            mm1 = float(self.N) * float(np.sum(wt * nd)) + m1_atom
+            mm2 = float(self.N) * float(np.sum(wt * nd ** 2)) + m2_atom
             ests.append(mm1 * mm1 / mm2 if mm2 > 0 else 1.0)
             i += sz
         return val, float(np.std(ests, ddof=1) / np.sqrt(p))
@@ -1168,7 +1201,9 @@ class Spectral:
         if self.matvec is None or other.matvec is None or self.N != other.N:
             raise ValueError("composition needs both operands' matvecs on the same R^N")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        if self.nodes.size == 0:
+            return f"Spectral(N={self.N}, empty)"
         lo, hi = self.extreme()
         return f"Spectral(N={self.N}, support=[{lo:.3g}, {hi:.3g}], eff_rank={self.effective_rank():.1f})"
 
@@ -1203,7 +1238,8 @@ def _gauss_from_moments(moments):
 
 
 # ── APPLY (matrix function on a vector — the universal solve/evolve engine) ───
-def apply(matvec, f, v, k: int = 48, hermitian: bool = True):
+def apply(matvec: Operator, f: Func, v: ArrayLike, k: int = 48,
+          hermitian: bool = True) -> ArrayLike:
     """f(A) · v, matrix-free — the universal engine (not just spectra).
 
     Any scalar function of an operator applied to a vector, from matvecs only:
@@ -1226,6 +1262,8 @@ def apply(matvec, f, v, k: int = 48, hermitian: bool = True):
     device and the result is returned there (float32 caveat: see `Spectral.of`).
     `matvec` may be a callable, LinearOperator, sparse matrix, or ndarray.
     """
+    if k < 1:
+        raise ValueError("k must be >= 1")
     if hasattr(matvec, "shape"):        # LinearOperator / sparse / ndarray
         matvec, _ = _as_operator(matvec)
     xp = _xp(v)
@@ -1233,8 +1271,8 @@ def apply(matvec, f, v, k: int = 48, hermitian: bool = True):
         return _apply_xp(matvec, f, v, k, hermitian, xp)
     v = np.asarray(v, complex if not hermitian else None)
     nv = np.linalg.norm(v)
-    if nv == 0:
-        return v.copy()
+    if nv < 1e-15:
+        raise ValueError("probe/seed vector is (near) zero")
     N = len(v)
 
     if hermitian and (np.iscomplexobj(v) or _is_complex_operator(matvec, N)):
@@ -1257,7 +1295,10 @@ def apply(matvec, f, v, k: int = 48, hermitian: bool = True):
         m = len(al)
         T = np.diag(al) + np.diag(be[:m - 1], 1) + np.diag(be[:m - 1], -1)
         theta, S = np.linalg.eigh(T)
-        return nv * (V @ (S @ (np.asarray(f(theta), float) * S[0, :])))
+        fth = np.asarray(f(theta))       # a complex f (e^{-iHt}) on a real
+        if not np.iscomplexobj(fth):     # symmetric A must keep its imaginary
+            fth = fth.astype(float)      # part; a real f casts to float as before
+        return nv * (V @ (S @ (fth * S[0, :])))
 
     # ── Arnoldi (general / non-symmetric, possibly complex) ──
     Q = np.zeros((N, k + 1), complex); H = np.zeros((k + 1, k), complex)
@@ -1278,7 +1319,9 @@ def apply(matvec, f, v, k: int = 48, hermitian: bool = True):
     return out
 
 
-def grad_trace(matvec, dmatvecs, fprime, N=None, k: int = 48, probes: int = 16,
+def grad_trace(matvec: Operator, dmatvecs: Any,
+               fprime: Callable[[np.ndarray], np.ndarray],
+               N: Optional[int] = None, k: int = 48, probes: int = 16,
                seed: int = 0, with_err: bool = False):
     """∂/∂θ_j Tr f(A(θ)) — DIFFERENTIABLE spectral reads, matrix-free.
 
@@ -1325,7 +1368,8 @@ def grad_trace(matvec, dmatvecs, fprime, N=None, k: int = 48, probes: int = 16,
 
 
 # ── LOCAL response (probe the operator from a CHOSEN vector, not random) ──────
-def local_spectrum(matvec, v, k: int = 48):
+def local_spectrum(matvec: Operator, v: ArrayLike, k: int = 48
+                   ) -> Tuple[np.ndarray, np.ndarray]:
     """The local spectral measure seen from vector v:  μ_v = Σ_i |⟨v|ψ_i⟩|² δ(λ_i).
 
     One Lanczos from v → Ritz nodes + first-component² weights.  This is the
@@ -1333,8 +1377,13 @@ def local_spectrum(matvec, v, k: int = 48):
     (LDOS) at site i.  ``Spectral.of`` averages this over random v (→ the trace);
     here you choose v.  Returns (nodes, weights), weights summing to ‖v‖²-norm 1.
     """
+    if k < 1:
+        raise ValueError("k must be >= 1")
     if hasattr(matvec, "shape"):        # LinearOperator / sparse / ndarray
         matvec, _ = _as_operator(matvec)
+    v = np.asarray(v)
+    if np.linalg.norm(v) < 1e-15:
+        raise ValueError("probe/seed vector is (near) zero")
     if np.iscomplexobj(v) or _is_complex_operator(matvec, len(v)):
         al, be = _lanczos_herm(matvec, np.asarray(v, complex), k)
     else:
@@ -1345,7 +1394,8 @@ def local_spectrum(matvec, v, k: int = 48):
     return theta, S[0, :] ** 2
 
 
-def local_density(matvec, v, xs, k: int = 48, eta: float = 0.1):
+def local_density(matvec: Operator, v: ArrayLike, xs: ArrayLike, k: int = 48,
+                  eta: float = 0.1) -> np.ndarray:
     """LDOS / vector-resolved density  ρ_v(x) = Σ_i |⟨v|ψ_i⟩|² · L_η(x − λ_i),
     a Lorentzian-smoothed local_spectrum (matrix-free, one Lanczos from v)."""
     theta, w = local_spectrum(matvec, v, k)
@@ -1354,7 +1404,8 @@ def local_density(matvec, v, xs, k: int = 48, eta: float = 0.1):
             / ((xs[:, None] - theta[None, :]) ** 2 + eta ** 2)).sum(1)
 
 
-def from_measure(nodes, weights, k=None):
+def from_measure(nodes: ArrayLike, weights: ArrayLike, k: Optional[int] = None
+                 ) -> Tuple[np.ndarray, np.ndarray]:
     """The INVERSE response transform: a spectral measure (nodes, weights) → the
     Jacobi (tridiagonal) operator whose e₀-measure it is, as (α, β) — diagonal and
     POSITIVE off-diagonal.
@@ -1373,14 +1424,16 @@ def from_measure(nodes, weights, k=None):
     return _lanczos(lambda x: lam * x, np.sqrt(np.clip(w, 0.0, None)), k or len(lam))
 
 
-def synthesize(nodes, weights, k=None):
+def synthesize(nodes: ArrayLike, weights: ArrayLike, k: Optional[int] = None
+               ) -> Tuple[np.ndarray, np.ndarray]:
     """CONSTRUCT an operator with the prescribed spectral measure — the
     discoverable verb (1.4+) for `from_measure` (the same function; both
     names stay, `from_measure` remains the precise synonym)."""
     return from_measure(nodes, weights, k=k)
 
 
-def from_eigenbasis(eigenvalues, eigenvectors):
+def from_eigenbasis(eigenvalues: ArrayLike, eigenvectors: ArrayLike
+                    ) -> Tuple[np.ndarray, np.ndarray]:
     """Reconstruct a Jacobi (tridiagonal) operator's band from its FULL
     eigendecomposition A = V·diag(λ)·Vᵀ — EXACT (machine precision) for ANY
     operator, sharp or smooth, because it reads the tridiagonal entries of VΛVᵀ

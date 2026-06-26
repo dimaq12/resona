@@ -3,6 +3,80 @@
 All notable changes to resona.  The discipline throughout: every number below
 is printed by a test or a gallery stand, not asserted by hand.
 
+## [3.2.0] — 2026-06-26
+Correctness-hardening batch — a full adversarial audit of all 17 modules, every
+claim reproduced against dense/analytic ground truth, then fixed in one pass.
+**215 tests green** (was 159; +56 regression tests, one per fixed bug), 4/4 absolute
+certificates pass, 0 new discarded solver flags, gallery 722→728 s (flat, noise).
+Two API contracts change — the library has no external users, so the correct shape
+wins over compatibility.  See `AUDIT_VERIFIED_2026-06-26.md` for the full triage
+(every "critical" claim marked REAL / PARTIAL / FALSE with its repro).
+
+### Fixed — silently-wrong numbers (these correct previously-confident garbage)
+- **`defect.richardson_limit`** — the Romberg ratio carried a spurious `*col` in the
+  exponent (`(n_k/n_{k-col})**(p0*col)` → `**p0`), over-extrapolating every column
+  past the first.  `grand_tour` Richardson-to-π: **2.8e-05 → 4.4e-16**;
+  `defect_spectroscopy` three-read rel-err: **4.23e-05 → 1.64e-06**.
+- **`apply` complex `f` on a real-symmetric A** — the real-Lanczos branch cast
+  `f(θ)` to float, silently dropping the imaginary part of e.g. `e^{-iHt}`.  Now keeps
+  complex: matches `scipy.linalg.expm(-iA)·v` to **~1e-7**.
+- **`defect.defect_jump`** — same gratuitous `float()` cast dropped the imaginary
+  part of a complex defect; preserved now.  `richardson_limit` likewise no longer
+  crashes on a complex value sequence.
+- **`thermal.correlator`** — the uniform fast-path stepped from the unevolved β-state,
+  returning `C(t − t₀)` when the time grid started at `t₀≠0`.  Now pre-evolves to
+  `ts[0]`; fast and slow branches agree with `expm` to **<1e-8** on a t₀=2.0 grid.
+- **`lift.s_transform`** — the bisection bracket `hi = 1/λmax − 1e-12` inverted once
+  `1/λmax ≤ 1e-12`, returning an exactly-2× wrong S-transform above λmax≈1e12.
+  Bracket now hugs the pole relatively + a residual check; correct at λmax≈1e13.
+- **`brown` mass** — the "inside-the-box" mass was integrated from the clipped
+  (≥0) density, inflating it under SLQ noise.  Now integrates the signed `mu_raw`:
+  Ginibre N=60 exact path **1.0768 → 1.0003** (true 1.0), matrix-free **1.0043 → 0.9956**.
+- **`cost.rmt_class`** — index `len(s)//4 − 1` went to −1 on ≤4-value spectra, wrapping
+  to `s[-1]` and **always** reporting GSE; clamped + a `<5`-value "undetermined" guard.
+- **`cloud_flow.exceptional_point`** — golden-section refinement matched eigenvalues
+  against the stale start pair, not the continued pair (the dead `cur = last` was the
+  abandoned fix).  Now threads the continued pair: on a 4×4 with a real EP the refined
+  `rig_min` drops **0.31 → 3.5e-7** instead of returning a worse-than-coarse result.
+- **`solve.rayleigh_polish`** — the matrix-free path used MINRES (symmetric-only) on
+  any operator; new `symmetric=False` routes to `lgmres` (flag captured), so a
+  non-symmetric A polishes to a true eigenvalue instead of silent garbage.
+
+### Fixed — bad input now errors instead of returning NaN / crashing opaquely
+Reachable guards (the normal path is untouched): `k≥1` in `of`/`apply`/`local_spectrum`;
+near-zero probe vector; `zoom` on an empty window; `richardson(p>0)`, `generator_read(t>0)`,
+`defect` shape-match, `thermal.expect(probes>0)`, `brown_measure` grid ≥3/axis,
+`lift_rank` zero/short signal, `level_spacing_ratio`/`rmt_class` min length; `thermal.state`
+floors the partition weight (no large-β underflow); `repr` of an empty `Spectral`; `wkernel.track`
+falls back to dense `eigh` when `k≥N` (was a hard ARPACK crash); `cloud_flow` matrix-free
+routes N<3 to dense (ARPACK shift-invert needs `k<N−1`).
+
+### Added — honest non-convergence diagnostics
+`subordination.pastur` and `brown._free_add_dos` now track the fixed-point residual and
+`warnings.warn` when it stalls (near hard edges / the σ→0 ridge) — previously silent;
+converged results are bit-identical.  `trace(log)` on non-positive nodes and
+`rie_clean_additive` driving a spectrum negative also warn.
+
+### Changed — performance & internals
+- **`lift.r_transform`/`s_transform`** bisection 110→55 iterations (float64 is already
+  below eps by 55): **2× fewer iterations, bit-identical** result (r_transform 0.0 diff,
+  s_transform 1 ulp).
+- **`zoom`** no longer carries the filtered tridiagonals, so `trace_certified` correctly
+  refuses a non-unit-mass zoom measure instead of returning a degenerate bracket.
+- **`effective_rank(with_err=True)`** now includes the deflate-atom contribution in the
+  per-probe scatter (unbiased error bars when `deflate>0`; `deflate=0` unchanged).
+- **Type annotations** across all 14 touched modules (`from __future__ import annotations`;
+  runtime no-ops) — coverage was weak.
+
+### Changed — API contracts (BREAKING; no external users)
+- **`resona.brown`** — a black-box matvec can't yield its own adjoint, so a non-dense
+  operator now **requires** `rmatvec=A*·x`, or an explicit `assume_self_adjoint=True`.
+  Previously it silently assumed self-adjointness and built the wrong `(A−z)*(A−z)` for
+  any non-normal operator.  Dense-matrix inputs are unaffected (they derive the adjoint).
+- **`resona.lift.carleman_scalar`** — the basis is augmented from `(x¹…x^order)` to
+  `(x⁰…x^order)` so the polynomial's constant term `c₀` is no longer dropped from `ẋ₁`.
+  The matrix is now `(order+1)²` and `x` reads at index 1 (was 0).
+
 ## [3.1.2] — 2026-06-20
 Docs catch up to 3.0/3.1, plus two data-science stands.  No library API change.
 - **New `COOKBOOK.md`** — 13 task→primitive→snippet recipes, organized by the five

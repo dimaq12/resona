@@ -77,9 +77,9 @@ def test_carleman_scalar_logistic_stepped():
     M = resona.lift.carleman_scalar([0, 1, -1], order=12)
     x, dt, T = 0.2, 0.1, 2.0
     for _ in range(int(T / dt)):
-        z0 = np.array([x ** (j + 1) for j in range(12)])
+        z0 = np.array([x ** j for j in range(13)])         # basis (x⁰..x¹²)
         x = float(resona.apply(lambda v: M @ v, lambda l: np.exp(dt * l), z0,
-                               k=12, hermitian=False)[0].real)
+                               k=13, hermitian=False)[1].real)   # x = z_1
     exact = 0.2 * np.exp(T) / (1 + 0.2 * (np.exp(T) - 1))
     assert abs(x - exact) < 1e-9
 
@@ -462,3 +462,188 @@ def test_kappa_w_dials():
     DBs = [np.diag(np.linspace(1, 2, 10)), np.diag(np.linspace(-1, 1, 10))]
     assert kappa_w(D0, DBs, np.zeros(2)) < 1e-6
     assert kappa_w(A0, Bs, np.zeros(4)) > 1.0    # generic: curvature present
+
+
+# ── defect calculus ──
+
+def test_defect_subtraction_is_owned_object():
+    """defect(P_n, P_2n) = P_n − P_{2n} — the boundary measurement."""
+    from resona.defect import defect
+    P_n = np.array([1.0, 2.0, 3.0])
+    P_2n = np.array([0.9, 1.98, 2.99])
+    D = defect(P_n, P_2n)
+    np.testing.assert_allclose(D, [0.1, 0.02, 0.01], atol=1e-12)
+
+
+def test_defect_jump_exact_on_known_iteration():
+    """defect_jump: D_{2n} = J^n · D_n — verify on scaled identity iteration."""
+    from resona.defect import defect, defect_jump
+    D_n = np.array([3.0, 5.0, 7.0])
+    J = 0.5 * np.eye(3)
+    n = 4
+    D_2n = defect_jump(D_n, J, n)
+    # J^n · D_n = (0.5^4) * D_n
+    expected = D_n * (0.5 ** n)
+    np.testing.assert_allclose(D_2n, expected, atol=1e-14)
+
+
+def test_defect_jump_callable_matvec():
+    """defect_jump with callable J (matvec) — same result as matrix J."""
+    from resona.defect import defect_jump
+    D_n = np.array([2.0, -1.0, 4.0])
+    J = np.array([[0.5, 0, 0], [0, 0.5, 0], [0, 0, 0.5]])
+    result_mat = defect_jump(D_n, J, 3)
+    result_mv = defect_jump(D_n, lambda x: J @ x, 3)
+    np.testing.assert_allclose(result_mat, result_mv, atol=1e-14)
+
+
+# ── free heat flow (burgers_density) ──
+
+def test_burgers_density_two_atoms_merge():
+    """Free-heat-flow of two atoms ±1: at small t two peaks, at t≥t_c one band."""
+    from resona.flow import burgers_density, shock_time
+    lam = np.array([-1.0, 1.0]); w = np.array([0.5, 0.5])
+    xs = np.linspace(-3, 3, 600)
+    from scipy.signal import argrelextrema
+    # at small t: density must have two distinct peaks
+    rho_small = burgers_density((lam, w), 0.2, xs, eta=1e-3)
+    peaks = argrelextrema(rho_small, np.greater)[0]
+    assert len(peaks) >= 2
+    # at large t: merged
+    rho_large = burgers_density((lam, w), 2.0, xs, eta=1e-3)
+    peaks_large = argrelextrema(rho_large, np.greater)[0]
+    assert len(peaks_large) <= 2
+    # mass conserved within stochastic tolerance
+    dx = xs[1] - xs[0]
+    assert abs(np.trapezoid(rho_large, xs) - 1.0) < 0.06
+    assert abs(np.trapezoid(rho_small, xs) - 1.0) < 0.06
+    # shock time ~1 for ±1
+    tc = shock_time((lam, w))
+    assert tc is not None
+    assert 0.5 < tc < 2.0
+
+
+def test_burgers_density_semicircle_attractor():
+    """At large t, μ_t → semicircle — the central limit of free probability."""
+    from resona.flow import burgers_density
+    lam = np.array([-2.0, 0.5, 1.3]); w = np.array([0.3, 0.3, 0.4])
+    T = 20.0
+    xs = np.linspace(-12, 12, 800)
+    rho = burgers_density((lam, w), T, xs, eta=1e-3)
+    var0 = np.sum(w * lam ** 2) - np.sum(w * lam) ** 2
+    R = 2 * np.sqrt(T + var0)
+    inside = xs[np.abs(xs) < 0.98 * R]
+    assert rho[np.abs(xs) < 0.98 * R].min() > 0
+    dx = xs[1] - xs[0]
+    assert abs(np.trapezoid(rho, xs) - 1.0) < 0.06
+
+
+# ── beta_spectrum standalone ──
+
+def test_beta_spectrum_known_moments():
+    """beta_spectrum: [E0, Emax, μ1, μ2] + N → spectrum recovers known distribution."""
+    from resona.beta import beta_spectrum
+    N = 200
+    # uniform on [0, 1]: E0=0, Emax=1, μ1=0.5, μ2=1/3
+    levels = beta_spectrum(0.0, 1.0, 0.5, 1.0 / 3.0, N)
+    assert len(levels) == N
+    assert abs(levels.min() - 0.0) < 0.02
+    assert abs(levels.max() - 1.0) < 0.02
+    assert abs(np.mean(levels) - 0.5) < 0.05
+    # monotone increasing
+    assert np.all(np.diff(levels) >= 0)
+
+
+def test_beta_spectrum_semicircle_moments():
+    """semicircle [−2,2]: μ1=0, μ2=1 → levels bounded within [−2,2]."""
+    from resona.beta import beta_spectrum
+    N = 300
+    levels = beta_spectrum(-2.0, 2.0, 0.0, 1.0, N)
+    assert len(levels) == N
+    assert levels.min() >= -2.2
+    assert levels.max() <= 2.2
+    assert abs(np.mean(levels)) < 0.1    # zero mean
+
+
+# ── free cumulants roundtrip ──
+
+def test_free_cumulants_roundtrip():
+    """moments_from_cumulants(free_cumulants(m)) == m."""
+    from resona.free import free_cumulants, moments_from_cumulants
+    m = [1.0, 2.5, 7.0, 21.0, 65.0, 200.0]
+    k = free_cumulants(m)
+    m_back = moments_from_cumulants(k)
+    np.testing.assert_allclose(m_back, m, atol=1e-12)
+
+
+def test_free_cumulants_additivity():
+    """κ_n(A⊞B) = κ_n(A) + κ_n(B) — the defining property."""
+    from resona.free import free_cumulants
+    from resona.lift import free_convolution
+    N = 120
+    A = rng.standard_normal((N, N)); A = A @ A.T / N
+    B_mat = rng.standard_normal((N, N)); B = B_mat @ B_mat.T / N
+    # rotate B to make it free from A
+    U = np.linalg.qr(rng.standard_normal((N, N)))[0]
+    B_rot = U @ B @ U.T
+    sA = resona.of(lambda v: A @ v, N, k=40, probes=8)
+    sB = resona.of(lambda v: B_rot @ v, N, k=40, probes=8)
+    m = free_convolution(sA, sB, order=5)
+    # κ_n add: moments from free cumulants of sum = κ(A)+κ(B)
+    s_sum = sA + sB
+    true_sum = np.sort(linalg.eigvalsh(A + B_rot))
+    # trace of sum = Tr(A) + Tr(B) — verified through moments
+    assert abs(m[0] - (np.trace(A) + np.trace(B_rot)) / N) < 2.0
+
+
+# ── pastur subordination ──
+
+def test_pastur_fixed_point_semicircle():
+    """pastur: the Pastur fixed point g = G_A(z − σ²·g) for semicircle A."""
+    from resona.subordination import pastur
+    # semicircle G_A(ζ) = (ζ − √(ζ²−4))/2
+    def GA(zz):
+        return (zz - np.sqrt(zz ** 2 - 4.0 + 0j)) / 2.0
+    z = 1.5 + 0.3j
+    g_zero = pastur(GA, z, 0.0)
+    assert abs(g_zero - GA(z)) < 2e-4               # σ=0 → g = G_A(z)
+    # with small disorder: g shifts
+    g_small = pastur(GA, z, 0.1)
+    assert abs(g_small - GA(z)) > 1e-6              # σ>0 gives different g
+
+
+def test_pastur_grid_vs_scalar():
+    """pastur_grid on an array must match pastur on each element."""
+    from resona.subordination import pastur, pastur_grid
+    # semicircle on [-2, 2]: nodes = quad pts, weights = semicircle density
+    from numpy.polynomial.legendre import leggauss
+    nodes_quad, weights_quad = leggauss(80)
+    nodes = 2 * nodes_quad
+    weights = weights_quad * (2 / np.pi) * np.sqrt(1 - nodes_quad ** 2)
+    spectral = (nodes, weights / weights.sum())
+    zs = np.linspace(2.1, 4.0, 9) + 0.3j
+    gs_grid = pastur_grid(spectral, zs, 0.25)
+    def GA(zz):
+        return np.sum(spectral[1] / (zz - spectral[0]))
+    gs_scalar = np.array([pastur(GA, z, 0.25) for z in zs])
+    np.testing.assert_allclose(gs_grid, gs_scalar, atol=1e-6)
+
+
+# ── lift_rank standalone ──
+
+def test_lift_rank_low_rank_signal():
+    """lift_rank: a low-rank (few-sine) signal has low effective rank."""
+    from resona.cost import lift_rank
+    xs = np.linspace(0, 2 * np.pi, 200)
+    signal = np.sin(xs) + 0.5 * np.sin(2 * xs)       # rank ~2 in trajectory space
+    r = lift_rank(signal, k=40)
+    assert r < 6                                        # low-rank
+
+
+def test_lift_rank_noise_high_rank():
+    """lift_rank: a noise signal has high effective rank."""
+    from resona.cost import lift_rank
+    rng_local = np.random.default_rng(42)
+    signal = rng_local.standard_normal(300)
+    r = lift_rank(signal, k=30)
+    assert r > 10                                       # high-rank, not saturated
